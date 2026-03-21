@@ -74,7 +74,7 @@ export default function LoginPage() {
           <h2 style={{ fontSize: 30, fontWeight: 800, color: '#0F172A', margin: '0 0 6px', letterSpacing: '-0.02em' }}>Sign in</h2>
           <p style={{ fontSize: 15, color: '#64748B', margin: '0 0 28px' }}>Enter your details to access your workspace</p>
 
-          {/* Error banner */}
+          {/* Error banner */ }
           {(authError || googleError) && (
             <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: 20, padding: '12px 16px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, fontSize: 13, color: '#B91C1C', fontWeight: 500 }}>
               {authError || googleError}
