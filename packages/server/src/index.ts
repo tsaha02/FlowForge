@@ -45,13 +45,10 @@ const io = initSocketIO(httpServer);
 
 // ---- Middleware ----
 
-// Helmet: Adds security headers to protect against common attacks
-app.use(helmet());
-
-// CORS: Allows the frontend to call the backend. 
+// 1. CORS: Must be BEFORE Helmet to handle preflight (OPTIONS) requests correctly
 // In production, set ALLOWED_ORIGINS to your Vercel URL.
 const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',')
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim().toLowerCase().replace(/\/$/, ''))
   : ['http://localhost:3000', 'http://localhost:3001'];
 
 app.use(
@@ -59,15 +56,27 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
-      if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+      
+      const normalizedOrigin = origin.toLowerCase().replace(/\/$/, '');
+      
+      const isAllowed = 
+        allowedOrigins.includes(normalizedOrigin) || 
+        normalizedOrigin.endsWith('.vercel.app') || // Allow all Vercel previews during debugging
+        process.env.NODE_ENV === 'development';
+
+      if (isAllowed) {
         callback(null, true);
       } else {
+        console.warn(`[CORS Blocked] Origin: ${origin}`);
         callback(new Error('Not allowed by CORS'));
       }
     },
     credentials: true,
   }),
 );
+
+// 2. Helmet: Adds security headers
+app.use(helmet());
 
 // JSON parser: Converts incoming JSON request bodies to JavaScript objects
 app.use(express.json({ limit: '10mb' }));
