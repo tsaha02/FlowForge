@@ -48,10 +48,23 @@ const io = initSocketIO(httpServer);
 // Helmet: Adds security headers to protect against common attacks
 app.use(helmet());
 
-// CORS: Allows the frontend (localhost:3000) to call the backend (localhost:4000)
+// CORS: Allows the frontend to call the backend. 
+// In production, set ALLOWED_ORIGINS to your Vercel URL.
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['http://localhost:3000', 'http://localhost:3001'];
+
 app.use(
   cors({
-    origin: process.env.NEXTAUTH_URL || 'http://localhost:3000',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   }),
 );
