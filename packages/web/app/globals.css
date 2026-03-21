@@ -1,0 +1,348 @@
+@import 'tailwindcss';
+
+/* ============================================
+   FlowForge — Global Styles
+   ============================================ */
+
+
+/* CSS Custom Properties (Design Tokens) */
+:root {
+  /* Colors from the spec */
+  --sidebar-bg: #0F172A;
+  --sidebar-hover: #1E293B;
+  --sidebar-active: #334155;
+  --accent-blue: #3B82F6;
+  --accent-blue-hover: #2563EB;
+  --success-green: #22C55E;
+  --error-red: #EF4444;
+  --warning-amber: #F59E0B;
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F8FAFC;
+  --bg-card: #FFFFFF;
+  --border-color: #E2E8F0;
+  --text-primary: #0F172A;
+  --text-secondary: #64748B;
+  --text-muted: #94A3B8;
+}
+
+/* Global Dark Mode (Invert strategy) */
+html.dark {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* Double-invert things that shouldn't be inverted */
+html.dark img,
+html.dark video,
+html.dark .no-invert,
+html.dark [data-no-invert] {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* Base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  /* The filter on html creates a new containing block. 
+     We ensure body takes up the full scroll height so fixed modals don't clip. */
+  height: 100%;
+}
+
+/* Smooth scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Animation utilities */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.5; }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slideInLeft {
+  animation: slideInLeft 0.3s ease-out;
+}
+
+/* Glass morphism effect for cards */
+.glass-card {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ============================================
+   FlowForge — Page Layout Utilities
+   These are guaranteed to rendering correctely
+   regardless of Tailwind JIT configuration.
+   ============================================ */
+
+/* Page container */
+.page-root {
+  min-height: 100vh;
+  background-color: #F1F5F9;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Sticky top header bar used on list pages */
+.page-header-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #ffffff;
+  border-bottom: 1px solid #E2E8F0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.page-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px;
+}
+
+.page-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #0F172A;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.page-subtitle {
+  font-size: 0.9rem;
+  color: #64748B;
+  margin-top: 4px;
+}
+
+.page-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  background: #F8FAFC;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 0 16px;
+  margin: 0 32px 20px 32px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.page-search-bar:focus-within {
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+  background: #ffffff;
+}
+
+.page-search-bar input {
+  flex: 1;
+  height: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 0.9rem;
+  color: #0F172A;
+}
+
+.page-search-bar input::placeholder {
+  color: #94A3B8;
+}
+
+/* Page content area */
+.page-content {
+  flex: 1;
+  padding: 28px 32px;
+}
+
+/* Workflow card */
+.wf-card {
+  background: #ffffff;
+  border-radius: 20px;
+  border: 1.5px solid #E2E8F0;
+  padding: 24px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  position: relative;
+}
+
+.wf-card:hover {
+  border-color: #93C5FD;
+  box-shadow: 0 8px 24px rgba(59,130,246,0.10);
+  transform: translateY(-2px);
+}
+
+.wf-card-icon {
+  width: 48px;
+  height: 48px;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.wf-card:hover .wf-card-icon {
+  background: #DBEAFE;
+}
+
+.wf-card-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0F172A;
+  transition: color 0.2s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wf-card:hover .wf-card-title {
+  color: #2563EB;
+}
+
+.wf-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 100px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.wf-badge-draft { background: #F1F5F9; color: #475569; border-color: #CBD5E1; }
+.wf-badge-active { background: #F0FDF4; color: #16A34A; border-color: #BBF7D0; }
+.wf-badge-paused { background: #FFFBEB; color: #D97706; border-color: #FDE68A; }
+.wf-badge-trigger { background: #F8FAFC; color: #64748B; border-color: #E2E8F0; }
+
+.wf-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #F1F5F9;
+  font-size: 0.75rem;
+  color: #94A3B8;
+}
+
+/* Primary action button */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 22px;
+  background: #2563EB;
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 700;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(37,99,235,0.35);
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.btn-primary:hover {
+  background: #1D4ED8;
+  box-shadow: 0 4px 16px rgba(37,99,235,0.45);
+  transform: translateY(-1px);
+}
+
+/* Form input field */
+.ff-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+  background: #ffffff;
+  border: 1.5px solid #CBD5E1;
+  border-radius: 14px;
+  padding: 0 16px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.ff-input-wrap:focus-within {
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 4px rgba(59,130,246,0.12);
+}
+
+.ff-input-wrap.error {
+  border-color: #F87171;
+  background: #FFF5F5;
+}
+
+.ff-input-wrap input {
+  flex: 1;
+  height: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 0.9rem;
+  color: #0F172A;
+}
+
+.ff-input-wrap input::placeholder { color: #94A3B8; }
+.ff-input-icon { color: #94A3B8; flex-shrink: 0; display: flex; align-items: center; }
+

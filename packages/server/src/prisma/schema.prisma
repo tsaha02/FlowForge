@@ -1,0 +1,236 @@
+// ============================================
+// FlowForge — Prisma Database Schema
+// ============================================
+// This file defines ALL the database tables (called "models" in Prisma).
+// Think of each model as a table in the database.
+// Relations are like links between tables (e.g., a User has many Workflows).
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---- ENUMS ----
+// Enums are like predefined options (dropdown values)
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum WorkflowStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum TriggerType {
+  MANUAL
+  CRON
+  WEBHOOK
+}
+
+enum ExecutionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum NodeExecutionStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
+enum ExecutionTrigger {
+  MANUAL
+  CRON
+  WEBHOOK
+}
+
+enum CredentialType {
+  API_KEY
+  OAUTH
+  BASIC_AUTH
+  CUSTOM
+}
+
+// ---- MODELS ----
+
+/// A user who can log in and create workflows
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String?  // Nullable for OAuth-only users
+  googleId     String?  @unique // Store Google OAuth identifier
+  avatarUrl    String?
+  notifications Json?   @default("{\"email\":true,\"failed\":true,\"digest\":false}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations — a user can own workspaces, be a member of workspaces, etc.
+  ownedWorkspaces    Workspace[]
+  workspaceMemberships WorkspaceMember[]
+  createdWorkflows   Workflow[]
+  createdCredentials Credential[]
+
+  @@map("users") // Table name in the database
+}
+
+/// A workspace is like a team/organization (multi-tenant)
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  // Relations
+  ownerId String
+  owner   User   @relation(fields: [ownerId], references: [id])
+
+  members     WorkspaceMember[]
+  workflows   Workflow[]
+  credentials Credential[]
+
+  @@map("workspaces")
+}
+
+/// Links users to workspaces with a specific role
+model WorkspaceMember {
+  id   String        @id @default(cuid())
+  role WorkspaceRole @default(MEMBER)
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId]) // A user can only be in a workspace once
+  @@map("workspace_members")
+}
+
+/// A workflow is the main entity — it contains the DAG (nodes + edges)
+model Workflow {
+  id          String         @id @default(cuid())
+  name        String
+  description String?
+  status      WorkflowStatus @default(DRAFT)
+
+  triggerType    TriggerType @default(MANUAL)
+  cronExpression String?    // e.g., "0 9 * * *" = every day at 9am
+  webhookId      String?    @unique
+
+  // The DAG is stored as JSON — React Flow nodes and edges arrays
+  nodesJson Json @default("[]")
+  edgesJson Json @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id])
+
+  executions Execution[]
+  webhook    Webhook?
+
+  @@map("workflows")
+}
+
+/// An execution is one run of a workflow
+model Execution {
+  id          String          @id @default(cuid())
+  status      ExecutionStatus @default(PENDING)
+  triggeredBy ExecutionTrigger
+
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  duration    Int?      // Duration in milliseconds
+
+  errorMessage String?
+
+  // Relations
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  nodeExecutions NodeExecution[]
+
+  @@map("executions")
+}
+
+/// Tracks the execution status of each individual node in a workflow run
+model NodeExecution {
+  id       String              @id @default(cuid())
+  nodeId   String              // Matches React Flow node id
+  nodeType String
+  nodeName String
+  status   NodeExecutionStatus @default(PENDING)
+
+  inputData  Json?   // Data received from parent nodes
+  outputData Json?   // Data this node produced
+  logs       String? @db.Text // Accumulated log text
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  duration    Int?       // Duration in milliseconds
+
+  errorMessage String?
+  retryCount   Int     @default(0)
+
+  // Relations
+  executionId String
+  execution   Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@map("node_executions")
+}
+
+/// Stores encrypted credentials (API keys, passwords, etc.)
+model Credential {
+  id            String         @id @default(cuid())
+  name          String
+  type          CredentialType
+  encryptedData String         @db.Text // AES-256 encrypted JSON
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id])
+
+  @@map("credentials")
+}
+
+/// Webhook endpoints for triggering workflows via HTTP
+model Webhook {
+  id     String  @id @default(cuid())
+  path   String  @unique // Unique slug like "abc123"
+  secret String  // For verifying webhook signatures
+  isActive       Boolean  @default(true)
+  lastTriggeredAt DateTime?
+
+  // Relations
+  workflowId String   @unique
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@map("webhooks")
+}

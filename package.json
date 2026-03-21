@@ -1,0 +1,23 @@
+{
+  "name": "flowforge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Visual Workflow Orchestration Engine",
+  "workspaces": [
+    "packages/web",
+    "packages/server"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:web\"",
+    "dev:web": "npm run dev --workspace=packages/web",
+    "dev:server": "npm run dev --workspace=packages/server",
+    "build": "npm run build --workspaces",
+    "lint": "npm run lint --workspaces",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "prettier": "^3.4.2"
+  }
+}

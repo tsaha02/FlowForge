@@ -1,0 +1,38 @@
+services:
+  # PostgreSQL — The main database that stores all your data
+  postgres:
+    image: postgres:15-alpine
+    container_name: flowforge-postgres
+    restart: unless-stopped
+    ports:
+      - '5434:5432'
+    environment:
+      POSTGRES_USER: flowforge
+      POSTGRES_PASSWORD: flowforge_password
+      POSTGRES_DB: flowforge
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U flowforge']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis — Fast in-memory store used for job queues & caching
+  redis:
+    image: redis:7-alpine
+    container_name: flowforge-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/var/lib/redis/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
