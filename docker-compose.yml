@@ -33,6 +33,36 @@ services:
       timeout: 5s
       retries: 5
 
+  # FlowForge Server — The backend API and Workflow engine
+  server:
+    build: ./packages/server
+    container_name: flowforge-server
+    restart: unless-stopped
+    ports:
+      - '4000:4000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://flowforge:flowforge_password@postgres:5432/flowforge
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-flowforge_secret_key}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      PORT: 4000
+
+  # FlowForge Web — The Next.js dashboard and editor
+  web:
+    build: ./packages/web
+    container_name: flowforge-web
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      NEXT_PUBLIC_SOCKET_URL: http://localhost:4000
+
 volumes:
   postgres_data:
   redis_data:

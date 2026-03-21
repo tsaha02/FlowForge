@@ -9,9 +9,10 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'FlowForge — Visual Workflow Orchestration',
+  title: 'FlowForge — The Open-Source Visual Workflow Engine',
   description:
-    'Design, execute, and monitor automated workflows with a visual drag-and-drop DAG editor.',
+    'Design, execute, and monitor powerful automated workflows with FlowForge. The professional drag-and-drop DAG orchestrator for modern teams.',
+  keywords: ['workflow automation', 'visual editor', 'DAG', 'orchestration', 'open source', 'low-code'],
 };
 
 export default function RootLayout({
@@ -24,6 +25,7 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="icon" href="/favicon.png" type="image/png" />
       </head>
       <body className={`${inter.className} bg-slate-50 text-slate-900 antialiased`}>
         <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || 'placeholder-client-id'}>
