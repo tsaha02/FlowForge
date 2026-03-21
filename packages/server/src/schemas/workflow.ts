@@ -30,12 +30,18 @@ export const updateWorkflowSchema = z.object({
     triggerType: TriggerTypeEnum.optional(),
     cronExpression: z
       .string()
-      .regex(
-        /^(\*|([0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9])|\*\/([0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9])) (\*|([0-9]|1[0-9]|2[0-3])|\*\/([0-9]|1[0-9]|2[0-3])) (\*|([1-9]|1[0-9]|2[0-9]|3[0-1])|\*\/([1-9]|1[0-9]|2[0-9]|3[0-1])) (\*|([1-9]|1[0-2])|\*\/([1-9]|1[0-2])) (\*|([0-6])|\*\/([0-6]))$/,
-        'Invalid cron expression',
-      )
       .optional()
-      .nullable(),
+      .nullable()
+      .refine(
+        (val) => {
+          if (!val || val.trim() === '') return true;
+          // Standard 5-part cron regex
+          return /^(\*|([0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9])|\*\/([0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9])) (\*|([0-9]|1[0-9]|2[0-3])|\*\/([0-9]|1[0-9]|2[0-3])) (\*|([1-9]|1[0-9]|2[0-9]|3[0-1])|\*\/([1-9]|1[0-9]|2[0-9]|3[0-1])) (\*|([1-9]|1[0-2])|\*\/([1-9]|1[0-2])) (\*|([0-6])|\*\/([0-6]))$/.test(
+            val,
+          );
+        },
+        { message: 'Invalid cron expression' },
+      ),
     nodesJson: z.array(z.any()).optional(), // React Flow nodes array
     edgesJson: z.array(z.any()).optional(), // React Flow edges array
   }),
