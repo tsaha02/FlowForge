@@ -209,6 +209,9 @@ async function executeEmail(input: NodeExecutionInput): Promise<unknown> {
       user: smtpUser,
       pass: smtpPass,
     },
+    connectionTimeout: 10000, // 10s to connect
+    greetingTimeout: 10000,   // 10s for greeting
+    socketTimeout: 20000,     // 20s for data
   });
 
   const info = await transporter.sendMail({
