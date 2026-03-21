@@ -41,7 +41,11 @@ export const workflowQueue = new Queue('workflow-execution', {
   defaultJobOptions: {
     removeOnComplete: 100, // Keep last 100 completed jobs
     removeOnFail: 50,
-    attempts: 1,
+    attempts: 3, // Retry failed jobs 3 times
+    backoff: {
+      type: 'exponential',
+      delay: 5000,
+    },
   },
 });
 
@@ -368,6 +372,7 @@ export function startWorkflowWorker() {
     {
       connection: getRedisConnection(),
       concurrency: 5, // Run up to 5 workflows simultaneously
+      lockDuration: 60000, // Give each node 60s to finish before assuming worker crashed
     },
   );
 
