@@ -10,7 +10,7 @@
 // 3. Handles errors consistently
 // 4. Provides typed methods for each endpoint
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000').replace(/\/$/, '');
 
 // Get the auth token from localStorage
 function getToken(): string | null {

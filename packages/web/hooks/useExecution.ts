@@ -36,7 +36,7 @@ interface UseExecutionReturn {
   stopMonitoring: () => void;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000').replace(/\/$/, '');
 
 export function useExecution(): UseExecutionReturn {
   const socketRef = useRef<Socket | null>(null);
