@@ -8,7 +8,7 @@
 // GET    /api/executions/:id         — Get execution details + node results
 
 import { Router, Response, NextFunction } from 'express';
-import { ExecutionStatus } from '@prisma/client';
+import { ExecutionStatus } from '../prisma/generated/client';
 import { prisma } from '../lib/prisma';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
