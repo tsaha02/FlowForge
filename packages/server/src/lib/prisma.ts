@@ -5,7 +5,7 @@
 // In development, we store it on `globalThis` to prevent too many connections
 // (hot-reloading creates a new connection each time without this trick).
 
-import { PrismaClient } from '../prisma/generated/client';
+import { PrismaClient } from '@prisma/client';
 
 // Declare a global variable to hold the Prisma client
 const globalForPrisma = globalThis as unknown as {

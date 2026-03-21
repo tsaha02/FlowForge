@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { encryptData, decryptData } from '../utils/encryption';
-import { CredentialType } from '../prisma/generated/client';
+import { CredentialType } from '@prisma/client';
 import { z } from 'zod';
 
 const router = Router();
