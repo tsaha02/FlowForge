@@ -1,0 +1,65 @@
+name: FlowForge CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: flowforge
+          POSTGRES_PASSWORD: flowforge_password
+          POSTGRES_DB: flowforge
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js 18.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18.x
+        cache: 'npm'
+
+    - name: Install root dependencies
+      run: npm install
+
+    - name: 📦 Build Server
+      run: |
+        cd packages/server
+        npm install
+        npx prisma generate --schema=./src/prisma/schema.prisma
+        npm run build
+      env:
+        DATABASE_URL: postgresql://flowforge:flowforge_password@localhost:5432/flowforge?schema=public
+
+    - name: 📦 Build Web
+      run: |
+        cd packages/web
+        npm install
+        npm run build
+      env:
+        NEXT_PUBLIC_API_URL: http://localhost:4000
+        NEXT_PUBLIC_SOCKET_URL: http://localhost:4000
