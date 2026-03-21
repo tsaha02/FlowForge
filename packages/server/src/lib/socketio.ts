@@ -16,10 +16,32 @@ let io: SocketIOServer | null = null;
 
 // Initialize Socket.IO with the HTTP server
 export function initSocketIO(server: HTTPServer): SocketIOServer {
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim().toLowerCase().replace(/\/$/, ''))
+    : ['http://localhost:3000', 'http://localhost:3001'];
+
   io = new SocketIOServer(server, {
     cors: {
-      origin: process.env.NEXTAUTH_URL || 'http://localhost:3000',
+      origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+
+        const normalizedOrigin = origin.toLowerCase().replace(/\/$/, '');
+
+        const isAllowed =
+          allowedOrigins.includes(normalizedOrigin) ||
+          normalizedOrigin.endsWith('.vercel.app') || // Allow all Vercel previews during debugging
+          process.env.NODE_ENV === 'development';
+
+        if (isAllowed) {
+          callback(null, true);
+        } else {
+          logger.warn(`[Socket.IO CORS Blocked] Origin: ${origin}`);
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
       methods: ['GET', 'POST'],
+      credentials: true,
     },
   });
 
