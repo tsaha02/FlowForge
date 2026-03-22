@@ -49,9 +49,42 @@ export function initSocketIO(server: HTTPServer): SocketIOServer {
     logger.info(`🔌 Client connected: ${socket.id}`);
 
     // Join a room for a specific execution (so we can target updates)
-    socket.on('join-execution', (executionId: string) => {
+    socket.on('join-execution', async (executionId: string) => {
       socket.join(`execution:${executionId}`);
       logger.info(`📡 ${socket.id} joined execution:${executionId}`);
+
+      // Catch-up: Send the current state immediately so the UI doesn't hang
+      // if it joined late (e.g., after the execution already started or finished)
+      try {
+        const { prisma } = await import('./prisma');
+        const exec = await prisma.execution.findUnique({
+          where: { id: executionId },
+          include: { nodeExecutions: { orderBy: { startedAt: 'asc' } } },
+        });
+
+        if (exec) {
+          // 1. Send overall status
+          socket.emit('execution:status', {
+            executionId: exec.id,
+            status: exec.status,
+          });
+
+          // 2. Send all existing node statuses
+          exec.nodeExecutions.forEach((ne) => {
+            socket.emit('execution:node-status', {
+              executionId: exec.id,
+              nodeId: ne.nodeId,
+              status: ne.status,
+              duration: ne.duration,
+              error: ne.errorMessage,
+            });
+          });
+
+          logger.info(`📡 Sent catch-up state for execution:${executionId} to ${socket.id}`);
+        }
+      } catch (err) {
+        logger.error(`❌ Failed to send catch-up state: ${err}`);
+      }
     });
 
     // Leave execution room

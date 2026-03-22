@@ -134,9 +134,11 @@ export function useExecution(): UseExecutionReturn {
     const socket = socketRef.current;
     if (socket && socket.connected) {
       // Socket is ready — join immediately
+      console.log(`📡 [useExecution] Joining execution room: ${execId}`);
       socket.emit('join-execution', execId);
     } else {
       // Socket not connected yet — queue the join for when it connects
+      console.log(`⏳ [useExecution] Queuing room join (socket disconnected): ${execId}`);
       pendingJoinRef.current = execId;
     }
   }, []);
