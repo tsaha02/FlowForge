@@ -52,6 +52,8 @@ export function useExecution(): UseExecutionReturn {
 
   // Initialize Socket.IO connection
   useEffect(() => {
+    console.log(`🔌 [useExecution] Connecting to: ${API_URL}`);
+    
     const socket = io(API_URL, {
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 10,
@@ -59,30 +61,40 @@ export function useExecution(): UseExecutionReturn {
     });
 
     socket.on('connect', () => {
+      console.log('✅ [useExecution] Connected to Socket.IO');
       setIsConnected(true);
       // If startMonitoring was called before the socket connected, join now
       if (pendingJoinRef.current) {
+        console.log(`📡 [useExecution] Joining execution room: ${pendingJoinRef.current}`);
         socket.emit('join-execution', pendingJoinRef.current);
         pendingJoinRef.current = null;
       }
     });
 
-    socket.on('reconnect', () => {
+    socket.on('connect_error', (err) => {
+      console.error('❌ [useExecution] Socket.IO connection error:', err);
+    });
+
+    socket.on('reconnect', (attempt) => {
+      console.log(`🔄 [useExecution] Reconnected after ${attempt} attempts`);
       // Re-join the execution room after a reconnect so we don't miss updates
       setExecutionId((currentId) => {
         if (currentId) {
+          console.log(`📡 [useExecution] Re-joining execution room: ${currentId}`);
           socket.emit('join-execution', currentId);
         }
         return currentId;
       });
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
+      console.warn(`🔌 [useExecution] Disconnected: ${reason}`);
       setIsConnected(false);
     });
 
     // Listen for execution status changes
     socket.on('execution:status', (data: { executionId: string; status: string }) => {
+      console.log(`📈 [useExecution] Status update: ${data.status}`, data);
       setExecutionStatus(data.status);
     });
 
