@@ -11,6 +11,7 @@
 import { Server as HTTPServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { logger } from '../utils/logger';
+import { prisma } from './prisma';
 
 let io: SocketIOServer | null = null;
 
@@ -50,26 +51,22 @@ export function initSocketIO(server: HTTPServer): SocketIOServer {
 
     // Join a room for a specific execution (so we can target updates)
     socket.on('join-execution', async (executionId: string) => {
-      socket.join(`execution:${executionId}`);
-      logger.info(`📡 ${socket.id} joined execution:${executionId}`);
-
-      // Catch-up: Send the current state immediately so the UI doesn't hang
-      // if it joined late (e.g., after the execution already started or finished)
       try {
-        const { prisma } = await import('./prisma');
+        socket.join(`execution:${executionId}`);
+        logger.info(`📡 [Socket.IO] Client ${socket.id} joined room execution:${executionId}`);
+
+        // Catch-up: Send the current state immediately so the UI doesn't hang
         const exec = await prisma.execution.findUnique({
           where: { id: executionId },
           include: { nodeExecutions: { orderBy: { startedAt: 'asc' } } },
         });
 
         if (exec) {
-          // 1. Send overall status
           socket.emit('execution:status', {
             executionId: exec.id,
             status: exec.status,
           });
 
-          // 2. Send all existing node statuses
           exec.nodeExecutions.forEach((ne) => {
             socket.emit('execution:node-status', {
               executionId: exec.id,
@@ -79,11 +76,10 @@ export function initSocketIO(server: HTTPServer): SocketIOServer {
               error: ne.errorMessage,
             });
           });
-
-          logger.info(`📡 Sent catch-up state for execution:${executionId} to ${socket.id}`);
+          logger.info(`📡 [Socket.IO] Sent catch-up state for ${executionId} (Status: ${exec.status})`);
         }
       } catch (err) {
-        logger.error(`❌ Failed to send catch-up state: ${err}`);
+        logger.error(`❌ [Socket.IO] Join/Catch-up failure for ${executionId}: ${err}`);
       }
     });
 
