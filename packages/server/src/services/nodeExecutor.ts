@@ -248,11 +248,11 @@ async function executeDbQuery(input: NodeExecutionInput): Promise<unknown> {
     throw new Error('DB Query node is missing a SQL query string.');
   }
 
-  const connectionString = input.credentials?.DB_QUERY_CONNECTION_STRING || process.env.DB_QUERY_CONNECTION_STRING;
+  const connectionString = input.credentials?.secret || input.credentials?.DB_QUERY_CONNECTION_STRING || process.env.DB_QUERY_CONNECTION_STRING;
   if (!connectionString) {
     throw new Error(
-      'DB Query node requires DB_QUERY_CONNECTION_STRING in packages/server/.env. ' +
-      'Format: postgresql://user:password@host:port/database'
+      'DB Query node requires a connection string. ' +
+      'Add a "DB Query" credential in the UI or set DB_QUERY_CONNECTION_STRING in packages/server/.env.'
     );
   }
 
@@ -291,10 +291,10 @@ async function executeAiLlm(input: NodeExecutionInput): Promise<unknown> {
   const systemPrompt = (input.config.systemPrompt as string) || 'You are a helpful assistant integrated into an automated workflow.';
   const temperature = (input.config.temperature as number) ?? 0.7;
 
-  const apiKey = input.credentials?.GROQ_API_KEY || process.env.GROQ_API_KEY;
+  const apiKey = input.credentials?.secret || input.credentials?.GROQ_API_KEY || process.env.GROQ_API_KEY;
 
   if (!apiKey) {
-    throw new Error('GROQ_API_KEY environment variable or injected credential is not set.');
+    throw new Error('GROQ_API_KEY is not set. Add a "Groq Key" credential in the UI or set it in packages/server/.env.');
   }
 
   logger.info(`🤖 [${input.label}] Calling Groq model: ${modelName}`);
@@ -410,7 +410,7 @@ async function executeCodeExecute(input: NodeExecutionInput): Promise<unknown> {
 // Users configure their webhookUrl in the node's config panel.
 // Get a webhook at: api.slack.com/apps → Incoming Webhooks
 async function executeSlackNotify(input: NodeExecutionInput): Promise<unknown> {
-  const webhookUrl = input.credentials?.webhookUrl || (input.config.webhookUrl as string) || '';
+  const webhookUrl = input.credentials?.secret || input.credentials?.webhookUrl || (input.config.webhookUrl as string) || '';
   const channelDisplay = (input.config.channel as string) || '#general';
   const messageTemplate = (input.config.message as string) || 'Workflow notification from FlowForge';
 
