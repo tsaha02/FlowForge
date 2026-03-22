@@ -115,11 +115,14 @@ export function emitExecutionStatus(
   data?: Record<string, unknown>,
 ) {
   if (io) {
+    logger.info(`📡 [Socket.IO] Emitting execution:status [${status}] to room execution:${executionId}`);
     io.to(`execution:${executionId}`).emit('execution:status', {
       executionId,
       status,
       ...data,
     });
+  } else {
+    logger.warn(`⚠️ [Socket.IO] Cannot emit execution:status - io is null`);
   }
 }
 
@@ -131,6 +134,7 @@ export function emitNodeStatus(
   data?: Record<string, unknown>,
 ) {
   if (io) {
+    logger.info(`📡 [Socket.IO] Emitting execution:node-status [${status}] for node ${nodeId}`);
     io.to(`execution:${executionId}`).emit('execution:node-status', {
       executionId,
       nodeId,
