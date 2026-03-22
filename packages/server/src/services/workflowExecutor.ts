@@ -35,7 +35,7 @@ function getRedisConnection() {
 }
 
 // ---- BullMQ Queue ----
-// Jobs are added to this queue when a user clicks "Run"
+// Jobs are added to this queue when a user clicks "Run" example
 export const workflowQueue = new Queue('workflow-execution', {
   connection: getRedisConnection(),
   defaultJobOptions: {
