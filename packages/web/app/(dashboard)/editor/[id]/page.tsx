@@ -28,9 +28,19 @@ export default function EditorPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [showExecutionLog, setShowExecutionLog] = useState(false);
+  // isSubmitting: true from the moment Run is clicked until execution reaches a terminal state
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Real-time execution monitoring
   const execution = useExecution();
+
+  // When execution reaches a terminal state, clear the submitting/loading flag
+  useEffect(() => {
+    const terminalStates = ['COMPLETED', 'FAILED', 'CANCELLED'];
+    if (execution.executionStatus && terminalStates.includes(execution.executionStatus)) {
+      setIsSubmitting(false);
+    }
+  }, [execution.executionStatus]);
 
   // Load the workflow from the API when the page loads
   useEffect(() => {
@@ -70,15 +80,20 @@ export default function EditorPage() {
   const handleRun = useCallback(async () => {
     if (!meta.id) return;
 
+    setIsSubmitting(true); // Show loading immediately on click, before any network call
     try {
       const response = await executionApi.execute(meta.id);
       if (response.data) {
         // Start monitoring the execution via Socket.IO
         execution.startMonitoring(response.data.executionId);
         setShowExecutionLog(true);
+        // isSubmitting remains true until executionStatus turns terminal (see useEffect above)
       }
     } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to start workflow';
       console.error('Failed to execute workflow:', error);
+      alert(`❌ ${msg}`); // Surface the error so the user knows what went wrong
+      setIsSubmitting(false); // Clear loading on API error
     }
   }, [meta.id, execution]);
 
@@ -101,7 +116,7 @@ export default function EditorPage() {
         <EditorToolbar
           onToggleSettings={toggleSettings}
           onRun={handleRun}
-          isRunning={execution.executionStatus === 'RUNNING'}
+          isRunning={isSubmitting}
           onToggleLog={() => setShowExecutionLog((prev) => !prev)}
           showLogIndicator={execution.logs.length > 0}
         />

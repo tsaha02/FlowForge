@@ -35,13 +35,16 @@ function getRedisConnection() {
 }
 
 // ---- BullMQ Queue ----
-// Jobs are added to this queue when a user clicks "Run" example
+// Jobs are added to this queue when a user clicks "Run"
+// IMPORTANT: attempts is 1 (no retries) because workflow nodes have side effects
+// (sending emails, posting to Slack, etc.). Auto-retrying would re-send the same
+// email/message multiple times. If a workflow fails, the user can re-run manually.
 export const workflowQueue = new Queue('workflow-execution', {
   connection: getRedisConnection(),
   defaultJobOptions: {
     removeOnComplete: 100, // Keep last 100 completed jobs
     removeOnFail: 50,
-    attempts: 3, // Retry failed jobs 3 times
+    attempts: 1, // No auto-retry — prevents duplicate side-effects
     backoff: {
       type: 'exponential',
       delay: 5000,
@@ -191,7 +194,8 @@ export function startWorkflowWorker() {
         const skippedNodes = new Set<string>();
         let hasFailure = false;
 
-        // Update execution with total node count
+        // Mark execution as RUNNING and record start time for duration tracking
+        const executionStartTime = Date.now();
         await prisma.execution.update({
           where: { id: executionId },
           data: { status: 'RUNNING' },
@@ -243,20 +247,17 @@ export function startWorkflowWorker() {
 
           if (shouldSkip) {
             skippedNodes.add(node.id);
+            emitNodeStatus(executionId, node.id, 'SKIPPED');
             emitExecutionLog(executionId, 'info', `⏭️ Skipped: ${node.data.label} (Condition not met or parent skipped)`, node.id);
-            // Optionally record as SKIPPED in db
-            await prisma.nodeExecution.create({
+            // Update the existing RUNNING record to SKIPPED (not a second insert!)
+            await prisma.nodeExecution.update({
+              where: { id: nodeExecution.id },
               data: {
-                executionId,
-                nodeId: node.id,
-                nodeType: node.data.nodeType,
-                nodeName: node.data.label,
-                status: 'SKIPPED' as any, // If DB schema allows it, else use SUCCESS/IGNORED
-                startedAt: new Date(),
+                status: 'SKIPPED',
                 completedAt: new Date(),
                 duration: 0,
               },
-            }).catch(() => {}); // ignore enum failure if SKIPPED not in schema
+            }).catch(() => {}); // ignore if SKIPPED enum not in schema
             continue;
           }
 
@@ -335,13 +336,14 @@ export function startWorkflowWorker() {
           }
         }
 
-        // 4. Mark execution as completed or failed
+        // 4. Mark execution as completed or failed, and store total duration
         const finalStatus = hasFailure ? 'FAILED' : 'COMPLETED';
         await prisma.execution.update({
           where: { id: executionId },
           data: {
             status: finalStatus,
             completedAt: new Date(),
+            duration: Date.now() - executionStartTime,
           },
         });
 

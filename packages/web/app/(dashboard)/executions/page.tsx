@@ -46,14 +46,19 @@ export default function ExecutionsPage() {
   const [hov, setHov] = useState<Record<string, boolean>>({});
   const h = (k: string) => ({ onMouseEnter: () => setHov(p => ({...p,[k]:true})), onMouseLeave: () => setHov(p => ({...p,[k]:false})) });
 
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!activeWorkspaceId) return;
     const load = async () => {
+      setError(null);
       try { 
         const r = await executionApi.list(activeWorkspaceId, page, 20); 
         setData(r.data as unknown as PaginatedExecutions); 
       }
-      catch { /* ignore */ } finally { setIsLoading(false); }
+      catch (err) { 
+        setError(err instanceof Error ? err.message : 'Failed to load executions');
+      } finally { setIsLoading(false); }
     };
     load();
     const iv = setInterval(load, 10000);
@@ -114,6 +119,17 @@ export default function ExecutionsPage() {
               <div key={i} style={{ height: 68, background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 16, opacity: 0.5 }} />
             ))}
           </div>
+        ) : error ? (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+            style={{ textAlign: 'center', padding: '80px 32px', background: '#FEF2F2', border: '1.5px solid #FECACA', borderRadius: 20 }}>
+            <XCircle size={36} color="#DC2626" style={{ margin: '0 auto 16px', display: 'block' }} />
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: '#DC2626', margin: '0 0 8px' }}>Failed to load executions</h3>
+            <p style={{ fontSize: 14, color: '#EF4444', maxWidth: 380, margin: '0 auto 20px', lineHeight: 1.6 }}>{error}</p>
+            <button onClick={() => window.location.reload()}
+              style={{ padding: '8px 20px', background: '#DC2626', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              Retry
+            </button>
+          </motion.div>
         ) : filtered.length === 0 ? (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
             style={{ textAlign: 'center', padding: '80px 32px', background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 20 }}>

@@ -46,14 +46,35 @@ export function useExecution(): UseExecutionReturn {
   const [nodeStatuses, setNodeStatuses] = useState<Map<string, NodeStatusUpdate>>(new Map());
   const [logs, setLogs] = useState<ExecutionLog[]>([]);
 
+  // Track the pending room to join — needed if startMonitoring is called
+  // before the socket has connected (race condition fix)
+  const pendingJoinRef = useRef<string | null>(null);
+
   // Initialize Socket.IO connection
   useEffect(() => {
     const socket = io(API_URL, {
       transports: ['websocket', 'polling'],
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
     });
 
     socket.on('connect', () => {
       setIsConnected(true);
+      // If startMonitoring was called before the socket connected, join now
+      if (pendingJoinRef.current) {
+        socket.emit('join-execution', pendingJoinRef.current);
+        pendingJoinRef.current = null;
+      }
+    });
+
+    socket.on('reconnect', () => {
+      // Re-join the execution room after a reconnect so we don't miss updates
+      setExecutionId((currentId) => {
+        if (currentId) {
+          socket.emit('join-execution', currentId);
+        }
+        return currentId;
+      });
     });
 
     socket.on('disconnect', () => {
@@ -97,16 +118,27 @@ export function useExecution(): UseExecutionReturn {
     setExecutionStatus('PENDING');
     setNodeStatuses(new Map());
     setLogs([]);
-    socketRef.current?.emit('join-execution', execId);
+
+    const socket = socketRef.current;
+    if (socket && socket.connected) {
+      // Socket is ready — join immediately
+      socket.emit('join-execution', execId);
+    } else {
+      // Socket not connected yet — queue the join for when it connects
+      pendingJoinRef.current = execId;
+    }
   }, []);
 
   // Leave the execution room
   const stopMonitoring = useCallback(() => {
-    if (executionId) {
-      socketRef.current?.emit('leave-execution', executionId);
-    }
-    setExecutionId(null);
-  }, [executionId]);
+    setExecutionId((currentId) => {
+      if (currentId) {
+        socketRef.current?.emit('leave-execution', currentId);
+      }
+      return null;
+    });
+    pendingJoinRef.current = null;
+  }, []);
 
   return {
     isConnected,
