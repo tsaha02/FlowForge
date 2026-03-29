@@ -32,6 +32,18 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string; border: string 
   PENDING:   { color: '#D97706', bg: '#FFFBEB', border: '#FDE68A' },
 };
 
+interface FlowReplayNode {
+  id: string;
+  position: { x: number; y: number };
+  data?: { label?: string };
+}
+
+interface FlowReplayEdge {
+  id: string;
+  source: string;
+  target: string;
+}
+
 export default function ExecutionDetailPage() {
   const { id: executionId } = useParams() as { id: string };
   const router = useRouter();
@@ -68,13 +80,19 @@ export default function ExecutionDetailPage() {
   const isFailed  = execution.status === 'FAILED';
   const isRunning = !isSuccess && !isFailed;
   const cfg = STATUS_CONFIG[execution.status] || STATUS_CONFIG.RUNNING;
+  const workflowNodes = Array.isArray(execution.workflow?.nodesJson)
+    ? (execution.workflow.nodesJson as FlowReplayNode[])
+    : [];
+  const workflowEdges = Array.isArray(execution.workflow?.edgesJson)
+    ? (execution.workflow.edgesJson as FlowReplayEdge[])
+    : [];
 
   // Compute Read-Only Flow graph
-  const rfNodes: Node[] = (execution.workflow?.nodesJson || []).map((n: any) => {
+  const rfNodes: Node[] = workflowNodes.map((n) => {
     const log = execution.nodeExecutions?.find(ne => ne.nodeId === n.id);
     let borderColor = '#E2E8F0';
     let bg = '#ffffff';
-    let opacity = log ? 1 : 0.4;
+    const opacity = log ? 1 : 0.4;
     
     if (log?.status === 'SUCCESS')   { borderColor = '#16A34A'; bg = '#F0FDF4'; }
     if (log?.status === 'FAILED')    { borderColor = '#DC2626'; bg = '#FEF2F2'; }
@@ -104,7 +122,7 @@ export default function ExecutionDetailPage() {
     };
   });
 
-  const rfEdges: Edge[] = (execution.workflow?.edgesJson || []).map((e: any) => {
+  const rfEdges: Edge[] = workflowEdges.map((e) => {
     // Determine target node status to color the edge
     const targetLog = execution.nodeExecutions?.find(ne => ne.nodeId === e.target);
     let edgeColor = '#94A3B8';

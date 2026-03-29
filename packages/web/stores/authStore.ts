@@ -12,14 +12,14 @@
 //   const { user, login, logout } = useAuthStore();
 
 import { create } from 'zustand';
-import { authApi, setToken, removeToken, LoginData, RegisterData } from '@/lib/api';
+import { authApi, setToken, removeToken, LoginData, RegisterData, NotificationPreferences } from '@/lib/api';
 
 interface User {
   id: string;
   name: string;
   email: string;
   avatarUrl: string | null;
-  notifications?: any;
+  notifications?: NotificationPreferences | null;
 }
 
 interface Workspace {

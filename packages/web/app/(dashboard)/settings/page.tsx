@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useRouter } from 'next/navigation';
-import { usersApi, workspacesApi } from '@/lib/api';
+import { usersApi, workspacesApi, NotificationPreferences } from '@/lib/api';
 import { toast } from 'sonner';
 import { useTheme } from 'next-themes';
 
@@ -60,6 +60,16 @@ const THEMES = [
   { id: 'system', label: 'System',     sub: 'Matches your OS',   icon: Monitor },
 ];
 
+const NOTIFICATION_OPTIONS: Array<{
+  id: keyof NotificationPreferences;
+  title: string;
+  desc: string;
+}> = [
+  { id: 'email', title: 'Email Alerts', desc: 'Receive important updates and security notices' },
+  { id: 'failed', title: 'Workflow Failures', desc: 'Get notified immediately if a workflow fails' },
+  { id: 'digest', title: 'Weekly Digest', desc: 'A summary of your workspace activity' },
+];
+
 export default function SettingsPage() {
   const { user, workspaces, activeWorkspaceId, logout, updateUser, updateWorkspace, removeWorkspace } = useAuthStore();
   const router = useRouter();
@@ -78,15 +88,15 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   
   // Default fallback if user has no notifications configured yet
-  const defaultAlerts = { email: true, failed: true, digest: false };
-  const [alerts, setAlerts] = useState<Record<string, boolean>>(defaultAlerts);
+  const defaultAlerts: NotificationPreferences = { email: true, failed: true, digest: false };
+  const [alerts, setAlerts] = useState<NotificationPreferences>(defaultAlerts);
 
   // Sync state if store updates from elsewhere
   useEffect(() => {
     if (user) {
       setProfileName(user.name);
       if (user.notifications) {
-        setAlerts(user.notifications as Record<string, boolean>);
+        setAlerts(user.notifications);
       }
     }
   }, [user]);
@@ -95,8 +105,8 @@ export default function SettingsPage() {
     if (activeWorkspace) setWorkspaceName(activeWorkspace.name);
   }, [activeWorkspace]);
 
-  const toggleAlert = async (k: string) => {
-    const next = { ...alerts, [k]: !alerts[k] };
+  const toggleAlert = async (key: keyof NotificationPreferences) => {
+    const next: NotificationPreferences = { ...alerts, [key]: !alerts[key] };
     setAlerts(next); // Optimistic UI update
     try {
       const res = await usersApi.updateMe({ notifications: next });
@@ -386,12 +396,8 @@ export default function SettingsPage() {
 
                 <div style={{ padding: '0 32px 32px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 540 }}>
-                    {[
-                      { id: 'email', title: 'Email Alerts', desc: 'Receive important updates and security notices' },
-                      { id: 'failed', title: 'Workflow Failures', desc: 'Get notified immediately if a workflow fails' },
-                      { id: 'digest', title: 'Weekly Digest', desc: 'A summary of your workspace activity' },
-                    ].map(opt => {
-                      const isActive = alerts[opt.id as keyof typeof alerts];
+                    {NOTIFICATION_OPTIONS.map(opt => {
+                      const isActive = alerts[opt.id];
                       return (
                         <div key={opt.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', border: '1px solid #E2E8F0', borderRadius: 14, background: '#F8FAFC' }}>
                           <div>

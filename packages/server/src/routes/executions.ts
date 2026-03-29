@@ -24,8 +24,15 @@ router.post(
   '/workflows/:id/execute',
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const workflow = await prisma.workflow.findUnique({
-        where: { id: req.params.id as string },
+      const workflow = await prisma.workflow.findFirst({
+        where: {
+          id: req.params.id as string,
+          workspace: {
+            members: {
+              some: { userId: req.userId! },
+            },
+          },
+        },
       });
 
       if (!workflow) {
@@ -78,6 +85,20 @@ router.get(
         throw new AppError('workspaceId query parameter is required', 400);
       }
 
+      const membership = await prisma.workspaceMember.findUnique({
+        where: {
+          workspaceId_userId: {
+            workspaceId,
+            userId: req.userId!,
+          },
+        },
+        select: { id: true },
+      });
+
+      if (!membership) {
+        throw new AppError('Workspace not found', 404);
+      }
+
       const where = {
         workflow: { workspaceId },
         ...(status ? { status } : {}),
@@ -121,8 +142,17 @@ router.get(
   '/executions/:id',
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const execution = await prisma.execution.findUnique({
-        where: { id: req.params.id as string },
+      const execution = await prisma.execution.findFirst({
+        where: {
+          id: req.params.id as string,
+          workflow: {
+            workspace: {
+              members: {
+                some: { userId: req.userId! },
+              },
+            },
+          },
+        },
         include: {
           workflow: {
             select: { id: true, name: true, nodesJson: true, edgesJson: true },

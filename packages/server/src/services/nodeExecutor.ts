@@ -188,7 +188,7 @@ async function executeEmail(input: NodeExecutionInput): Promise<unknown> {
   if (!smtpUser || !smtpPass) {
     throw new Error(
       'Email node requires SMTP credentials. ' +
-      'Add SMTP_USER and SMTP_PASS to packages/server/.env. ' +
+      'Add SMTP_USER and SMTP_PASS to the root .env file. ' +
       'For Gmail, create an App Password at myaccount.google.com/apppasswords'
     );
   }
@@ -252,7 +252,7 @@ async function executeDbQuery(input: NodeExecutionInput): Promise<unknown> {
   if (!connectionString) {
     throw new Error(
       'DB Query node requires a connection string. ' +
-      'Add a "DB Query" credential in the UI or set DB_QUERY_CONNECTION_STRING in packages/server/.env.'
+      'Add a "DB Query" credential in the UI or set DB_QUERY_CONNECTION_STRING in the root .env file.'
     );
   }
 
@@ -294,7 +294,7 @@ async function executeAiLlm(input: NodeExecutionInput): Promise<unknown> {
   const apiKey = input.credentials?.secret || input.credentials?.GROQ_API_KEY || process.env.GROQ_API_KEY;
 
   if (!apiKey) {
-    throw new Error('GROQ_API_KEY is not set. Add a "Groq Key" credential in the UI or set it in packages/server/.env.');
+    throw new Error('GROQ_API_KEY is not set. Add a "Groq Key" credential in the UI or set it in the root .env file.');
   }
 
   logger.info(`🤖 [${input.label}] Calling Groq model: ${modelName}`);

@@ -29,6 +29,8 @@ interface WorkflowMeta {
   status: 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
   triggerType: 'MANUAL' | 'CRON' | 'WEBHOOK';
   cronExpression: string;
+  webhookPath: string | null;
+  webhookActive: boolean;
 }
 
 interface WorkflowState {
@@ -60,6 +62,7 @@ interface WorkflowState {
 
   // Actions — Workflow metadata
   setMeta: (meta: Partial<WorkflowMeta>) => void;
+  markClean: () => void;
   validateWorkflow: () => { isValid: true } | { isValid: false; errors: string[] };
 
   // Actions — History (undo/redo)
@@ -75,6 +78,8 @@ interface WorkflowState {
     status: string;
     triggerType: string;
     cronExpression: string;
+    webhookPath?: string | null;
+    webhookActive?: boolean;
     nodes: Node[];
     edges: Edge[];
   }) => void;
@@ -82,6 +87,47 @@ interface WorkflowState {
 }
 
 const MAX_HISTORY = 50;
+
+function hasCycle(nodes: Node[], edges: Edge[]): boolean {
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const inDegree = new Map<string, number>();
+  const adjacency = new Map<string, string[]>();
+
+  for (const node of nodes) {
+    inDegree.set(node.id, 0);
+    adjacency.set(node.id, []);
+  }
+
+  for (const edge of edges) {
+    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
+      return true;
+    }
+
+    inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
+    adjacency.set(edge.source, [...(adjacency.get(edge.source) || []), edge.target]);
+  }
+
+  const queue = Array.from(inDegree.entries())
+    .filter(([, degree]) => degree === 0)
+    .map(([nodeId]) => nodeId);
+
+  let visitedCount = 0;
+
+  while (queue.length > 0) {
+    const nodeId = queue.shift()!;
+    visitedCount += 1;
+
+    for (const neighbor of adjacency.get(nodeId) || []) {
+      const nextDegree = (inDegree.get(neighbor) || 0) - 1;
+      inDegree.set(neighbor, nextDegree);
+      if (nextDegree === 0) {
+        queue.push(neighbor);
+      }
+    }
+  }
+
+  return visitedCount !== nodes.length;
+}
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   // Initial state
@@ -97,6 +143,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     status: 'DRAFT',
     triggerType: 'MANUAL',
     cronExpression: '',
+    webhookPath: null,
+    webhookActive: false,
   },
 
   history: [],
@@ -176,10 +224,11 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     meta: { ...get().meta, ...meta },
     isDirty: true,
   }),
+  markClean: () => set({ isDirty: false }),
 
   // ---- Validation ----
   validateWorkflow: () => {
-    const { nodes } = get();
+    const { nodes, edges } = get();
     const errors: string[] = [];
 
     if (nodes.length === 0) {
@@ -206,6 +255,10 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         }
       });
     });
+
+    if (hasCycle(nodes, edges)) {
+      errors.push('Workflow graph must be acyclic. Remove circular or invalid connections.');
+    }
 
     return errors.length === 0
       ? { isValid: true }
@@ -270,6 +323,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         status: (data.status as WorkflowMeta['status']) || 'DRAFT',
         triggerType: (data.triggerType as WorkflowMeta['triggerType']) || 'MANUAL',
         cronExpression: data.cronExpression || '',
+        webhookPath: data.webhookPath || null,
+        webhookActive: data.webhookActive || false,
       },
       history: [{ nodes: data.nodes || [], edges: data.edges || [] }],
       historyIndex: 0,
@@ -289,6 +344,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         status: 'DRAFT',
         triggerType: 'MANUAL',
         cronExpression: '',
+        webhookPath: null,
+        webhookActive: false,
       },
       history: [],
       historyIndex: -1,

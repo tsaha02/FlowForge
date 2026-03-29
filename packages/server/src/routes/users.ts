@@ -11,7 +11,11 @@ router.use(authMiddleware);
 const updateProfileSchema = z.object({
   name: z.string().min(2).optional(),
   avatarUrl: z.string().optional(),
-  notifications: z.any().optional(),
+  notifications: z.object({
+    email: z.boolean(),
+    failed: z.boolean(),
+    digest: z.boolean(),
+  }).optional(),
 });
 
 // Update the authenticated user's profile
@@ -38,7 +42,7 @@ router.put('/me', async (req, res) => {
     });
 
     res.json({ success: true, data: updatedUser });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error updating profile:', error);
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors });

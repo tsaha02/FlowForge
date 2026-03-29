@@ -19,7 +19,8 @@ import { registerSchema, loginSchema, googleAuthSchema } from '../schemas/auth';
 import { logger } from '../utils/logger';
 
 const router = Router();
-const googleClient = new OAuth2Client(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
+const googleClientId = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+const googleClient = new OAuth2Client(googleClientId);
 
 
 // ---- Rate Limiting ----
@@ -183,10 +184,14 @@ router.post('/google', validateRequest(googleAuthSchema), async (req: Request, r
   try {
     const { credential } = req.body;
 
+    if (!googleClientId) {
+      throw new AppError('Google OAuth is not configured on the server.', 500);
+    }
+
     // 1. Verify the Google token
     const ticket = await googleClient.verifyIdToken({
       idToken: credential,
-      audience: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
+      audience: googleClientId,
     });
     
     const payload = ticket.getPayload();

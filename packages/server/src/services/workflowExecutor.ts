@@ -94,6 +94,11 @@ interface FlowEdge {
   sourceHandle?: string | null;
 }
 
+interface ResolvedNodeInput {
+  shouldSkip: boolean;
+  previousOutput: unknown;
+}
+
 // ---- Topological Sort ----
 // Determines the execution order of nodes based on edges
 function topologicalSort(nodes: FlowNode[], edges: FlowEdge[]): FlowNode[] {
@@ -109,6 +114,10 @@ function topologicalSort(nodes: FlowNode[], edges: FlowEdge[]): FlowNode[] {
 
   // Count incoming edges for each node
   for (const edge of edges) {
+    if (!nodeMap.has(edge.source) || !nodeMap.has(edge.target)) {
+      throw new Error(`Workflow contains an invalid edge: ${edge.id}`);
+    }
+
     const count = inDegree.get(edge.target) || 0;
     inDegree.set(edge.target, count + 1);
     const adj = adjacency.get(edge.source) || [];
@@ -136,7 +145,95 @@ function topologicalSort(nodes: FlowNode[], edges: FlowEdge[]): FlowNode[] {
     }
   }
 
+  if (sorted.length !== nodes.length) {
+    throw new Error('Workflow graph must be acyclic. Remove circular connections and try again.');
+  }
+
   return sorted;
+}
+
+function resolveNodeInput(
+  nodeId: string,
+  edges: FlowEdge[],
+  nodeOutputs: Map<string, unknown>,
+  skippedNodes: Set<string>,
+  triggerPayload: unknown,
+): ResolvedNodeInput {
+  const incomingEdges = edges.filter((edge) => edge.target === nodeId);
+
+  if (incomingEdges.length === 0) {
+    return {
+      shouldSkip: false,
+      previousOutput: triggerPayload ?? null,
+    };
+  }
+
+  const activeInputs: Array<{
+    sourceNodeId: string;
+    sourceHandle: string | null;
+    output: unknown;
+  }> = [];
+
+  for (const incomingEdge of incomingEdges) {
+    const parentId = incomingEdge.source;
+
+    if (skippedNodes.has(parentId)) {
+      continue;
+    }
+
+    const parentOutput = nodeOutputs.get(parentId);
+
+    if (parentOutput && typeof parentOutput === 'object' && 'branch' in parentOutput) {
+      const selectedBranch = parentOutput.branch;
+      if (incomingEdge.sourceHandle !== selectedBranch) {
+        continue;
+      }
+    }
+
+    const output =
+      parentOutput && typeof parentOutput === 'object' && 'passedData' in parentOutput
+        ? parentOutput.passedData
+        : parentOutput;
+
+    activeInputs.push({
+      sourceNodeId: parentId,
+      sourceHandle: incomingEdge.sourceHandle ?? null,
+      output,
+    });
+  }
+
+  if (activeInputs.length === 0) {
+    return {
+      shouldSkip: true,
+      previousOutput: null,
+    };
+  }
+
+  if (activeInputs.length === 1) {
+    return {
+      shouldSkip: false,
+      previousOutput: activeInputs[0].output,
+    };
+  }
+
+  const byNodeId = Object.fromEntries(
+    activeInputs.map((input) => [input.sourceNodeId, input.output]),
+  );
+  const byHandle = Object.fromEntries(
+    activeInputs
+      .filter((input) => input.sourceHandle)
+      .map((input) => [input.sourceHandle as string, input.output]),
+  );
+
+  return {
+    shouldSkip: false,
+    previousOutput: {
+      primary: activeInputs[0].output,
+      inputs: activeInputs.map((input) => input.output),
+      byNodeId,
+      byHandle,
+    },
+  };
 }
 
 // ---- BullMQ Worker ----
@@ -145,7 +242,8 @@ export function startWorkflowWorker() {
   const worker = new Worker(
     'workflow-execution',
     async (job: Job) => {
-      let { workflowId, executionId } = job.data;
+      const workflowId = job.data.workflowId as string;
+      let executionId = job.data.executionId as string | undefined;
       const { isCron, triggerPayload } = job.data;
 
       if (!executionId && isCron) {
@@ -160,9 +258,15 @@ export function startWorkflowWorker() {
         executionId = execution.id;
       }
 
-      logger.info(`🚀 Starting execution ${executionId} for workflow ${workflowId}`);
-      emitExecutionStatus(executionId, 'RUNNING');
-      emitExecutionLog(executionId, 'info', '🚀 Workflow execution started');
+      if (!executionId) {
+        throw new Error(`Execution ID is missing for workflow ${workflowId}`);
+      }
+
+      const currentExecutionId = executionId;
+
+      logger.info(`🚀 Starting execution ${currentExecutionId} for workflow ${workflowId}`);
+      emitExecutionStatus(currentExecutionId, 'RUNNING');
+      emitExecutionLog(currentExecutionId, 'info', '🚀 Workflow execution started');
 
       try {
         // 1. Load the workflow from the database
@@ -184,13 +288,13 @@ export function startWorkflowWorker() {
         // 2. Topologically sort the nodes
         const sortedNodes = topologicalSort(nodes, edges);
         emitExecutionLog(
-          executionId,
+          currentExecutionId,
           'info',
           `📋 Execution plan: ${sortedNodes.map((n) => n.data.label).join(' → ')}`,
         );
 
         // 3. Execute each node in order
-        const nodeOutputs = new Map<string, any>();
+        const nodeOutputs = new Map<string, unknown>();
         const skippedNodes = new Set<string>();
         let hasFailure = false;
 
@@ -203,13 +307,13 @@ export function startWorkflowWorker() {
 
         for (const node of sortedNodes) {
           // Mark node as RUNNING
-          emitNodeStatus(executionId, node.id, 'RUNNING');
-          emitExecutionLog(executionId, 'info', `▶️ Running: ${node.data.label}`, node.id);
+          emitNodeStatus(currentExecutionId, node.id, 'RUNNING');
+          emitExecutionLog(currentExecutionId, 'info', `▶️ Running: ${node.data.label}`, node.id);
 
           // Create node execution record
           const nodeExecution = await prisma.nodeExecution.create({
             data: {
-              executionId,
+              executionId: currentExecutionId,
               nodeId: node.id,
               nodeType: node.data.nodeType,
               nodeName: node.data.label,
@@ -218,37 +322,18 @@ export function startWorkflowWorker() {
             },
           });
 
-          // Find the previous node's output (follow edges)
-          const incomingEdge = edges.find((e) => e.target === node.id);
-          
-          let shouldSkip = false;
-          let previousOutput: any = triggerPayload || null;
-
-          if (incomingEdge) {
-            const parentId = incomingEdge.source;
-            // 1. If parent was skipped, we are automatically skipped
-            if (skippedNodes.has(parentId)) {
-              shouldSkip = true;
-            } else {
-              // 2. If parent was a router/condition, verify branch matches handle
-              const parentOutput = nodeOutputs.get(parentId);
-              if (parentOutput && typeof parentOutput === 'object' && 'branch' in parentOutput) {
-                // The parent chose a specific branch. If this edge isn't on that branch, skip!
-                if (incomingEdge.sourceHandle !== parentOutput.branch) {
-                  shouldSkip = true;
-                }
-              }
-              // Normal data passing (if parent returned passedData specifically, use it, else whole output)
-              previousOutput = parentOutput && typeof parentOutput === 'object' && 'passedData' in parentOutput
-                ? parentOutput.passedData
-                : parentOutput;
-            }
-          }
+          const { shouldSkip, previousOutput } = resolveNodeInput(
+            node.id,
+            edges,
+            nodeOutputs,
+            skippedNodes,
+            triggerPayload,
+          );
 
           if (shouldSkip) {
             skippedNodes.add(node.id);
-            emitNodeStatus(executionId, node.id, 'SKIPPED');
-            emitExecutionLog(executionId, 'info', `⏭️ Skipped: ${node.data.label} (Condition not met or parent skipped)`, node.id);
+            emitNodeStatus(currentExecutionId, node.id, 'SKIPPED');
+            emitExecutionLog(currentExecutionId, 'info', `⏭️ Skipped: ${node.data.label} (Condition not met or parent skipped)`, node.id);
             // Update the existing RUNNING record to SKIPPED (not a second insert!)
             await prisma.nodeExecution.update({
               where: { id: nodeExecution.id },
@@ -273,14 +358,14 @@ export function startWorkflowWorker() {
               if (cred) {
                 const decryptedStr = decryptData(cred.encryptedData);
                 credentials = JSON.parse(decryptedStr);
-                emitExecutionLog(executionId, 'info', `🔑 Injected stored credentials`, node.id);
+                emitExecutionLog(currentExecutionId, 'info', `🔑 Injected stored credentials`, node.id);
               } else {
-                emitExecutionLog(executionId, 'warn', `⚠️ Credential ID ${credentialId} not found in database`, node.id);
+                emitExecutionLog(currentExecutionId, 'warn', `⚠️ Credential ID ${credentialId} not found in database`, node.id);
               }
             } catch (err) {
               const errMsg = err instanceof Error ? err.message : String(err);
               logger.error(`Failed to decrypt credentials for node ${node.id}: ${errMsg}`);
-              emitExecutionLog(executionId, 'warn', `⚠️ Failed to decrypt credentials: ${errMsg}`, node.id);
+              emitExecutionLog(currentExecutionId, 'warn', `⚠️ Failed to decrypt credentials: ${errMsg}`, node.id);
             }
           }
 
@@ -304,7 +389,7 @@ export function startWorkflowWorker() {
             where: { id: nodeExecution.id },
             data: {
               status: result.success ? 'SUCCESS' : 'FAILED',
-              outputData: result.output as object || undefined,
+              outputData: result.output === undefined ? undefined : (result.output as object),
               errorMessage: result.error || undefined,
               duration: result.duration,
               completedAt: new Date(),
@@ -312,21 +397,21 @@ export function startWorkflowWorker() {
           });
 
           if (result.success) {
-            emitNodeStatus(executionId, node.id, 'COMPLETED', {
+            emitNodeStatus(currentExecutionId, node.id, 'SUCCESS', {
               duration: result.duration,
             });
             emitExecutionLog(
-              executionId,
+              currentExecutionId,
               'success',
               `✅ Completed: ${node.data.label} (${result.duration}ms)`,
               node.id,
             );
           } else {
-            emitNodeStatus(executionId, node.id, 'FAILED', {
+            emitNodeStatus(currentExecutionId, node.id, 'FAILED', {
               error: result.error,
             });
             emitExecutionLog(
-              executionId,
+              currentExecutionId,
               'error',
               `❌ Failed: ${node.data.label} — ${result.error}`,
               node.id,
@@ -339,7 +424,7 @@ export function startWorkflowWorker() {
         // 4. Mark execution as completed or failed, and store total duration
         const finalStatus = hasFailure ? 'FAILED' : 'COMPLETED';
         await prisma.execution.update({
-          where: { id: executionId },
+          where: { id: currentExecutionId },
           data: {
             status: finalStatus,
             completedAt: new Date(),
@@ -347,28 +432,28 @@ export function startWorkflowWorker() {
           },
         });
 
-        emitExecutionStatus(executionId, finalStatus);
+        emitExecutionStatus(currentExecutionId, finalStatus);
         emitExecutionLog(
-          executionId,
+          currentExecutionId,
           hasFailure ? 'error' : 'success',
           hasFailure ? '❌ Workflow execution failed' : '🎉 Workflow execution completed!',
         );
 
-        logger.success(`✅ Execution ${executionId} ${finalStatus}`);
+        logger.success(`✅ Execution ${currentExecutionId} ${finalStatus}`);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-        logger.error(`❌ Execution ${executionId} failed: ${errorMsg}`);
+        logger.error(`❌ Execution ${currentExecutionId} failed: ${errorMsg}`);
 
         await prisma.execution.update({
-          where: { id: executionId },
+          where: { id: currentExecutionId },
           data: {
             status: 'FAILED',
             completedAt: new Date(),
           },
         });
 
-        emitExecutionStatus(executionId, 'FAILED', { error: errorMsg });
-        emitExecutionLog(executionId, 'error', `❌ Fatal error: ${errorMsg}`);
+        emitExecutionStatus(currentExecutionId, 'FAILED', { error: errorMsg });
+        emitExecutionLog(currentExecutionId, 'error', `❌ Fatal error: ${errorMsg}`);
       }
     },
     {

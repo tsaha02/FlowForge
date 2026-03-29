@@ -84,7 +84,7 @@ export default function EditorToolbar({
   onToggleSettings, onRun, isRunning = false, onToggleLog, showLogIndicator = false,
 }: EditorToolbarProps) {
   const router = useRouter();
-  const { meta, nodes, edges, isDirty, setMeta, undo, redo, historyIndex, history, validateWorkflow } = useWorkflowStore();
+  const { meta, nodes, edges, isDirty, setMeta, markClean, undo, redo, historyIndex, history, validateWorkflow } = useWorkflowStore();
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -100,7 +100,7 @@ export default function EditorToolbar({
     if (!v.isValid) { v.errors.forEach(e => toast.error(e)); return; }
     setIsSaving(true); setSaveSuccess(false);
     try {
-      await workflowApi.update(meta.id, {
+      const response = await workflowApi.update(meta.id, {
         name: meta.name,
         description: meta.description,
         status: meta.status,
@@ -109,9 +109,14 @@ export default function EditorToolbar({
         nodesJson: nodes as unknown[],
         edgesJson: edges as unknown[]
       });
+      setMeta({
+        webhookPath: response.data?.webhook?.path || null,
+        webhookActive: response.data?.webhook?.isActive || false,
+      });
+      markClean();
       setSaveSuccess(true); setTimeout(() => setSaveSuccess(false), 2000);
     } catch { toast.error('Failed to save'); } finally { setIsSaving(false); }
-  }, [meta, nodes, edges]);
+  }, [meta, nodes, edges, validateWorkflow, setMeta, markClean]);
 
   return (
     <div style={S.bar}>

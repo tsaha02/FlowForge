@@ -62,7 +62,15 @@ async function apiRequest<T>(
       headers,
     });
 
-    const data = await response.json();
+    if (response.status === 204) {
+      return { success: true };
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    const isJson = contentType.includes('application/json');
+    const data = isJson
+      ? await response.json()
+      : ({ success: response.ok, data: (await response.text()) as T } as ApiResponse<T>);
 
     if (!response.ok) {
       throw new Error(data.error?.message || `API Error: ${response.status}`);
@@ -126,6 +134,11 @@ export interface Workflow {
   edgesJson?: unknown[];
   createdBy?: { id: string; name: string; avatarUrl: string | null };
   _count?: { executions: number };
+  webhook?: {
+    path: string;
+    isActive: boolean;
+    lastTriggeredAt?: string | null;
+  } | null;
 }
 
 export const workflowApi = {
@@ -162,7 +175,7 @@ export interface Execution {
   completedAt: string | null;
   duration: number | null;
   errorMessage: string | null;
-  workflow?: { id: string; name: string; nodesJson?: any; edgesJson?: any };
+  workflow?: { id: string; name: string; nodesJson?: unknown; edgesJson?: unknown };
   nodeExecutions?: NodeExecution[];
   _count?: { nodeExecutions: number };
 }
@@ -218,6 +231,12 @@ export interface Credential {
   createdById: string;
 }
 
+export interface NotificationPreferences {
+  email: boolean;
+  failed: boolean;
+  digest: boolean;
+}
+
 export const credentialsApi = {
   list: (workspaceId: string) =>
     apiRequest<Credential[]>(`/api/credentials?workspaceId=${workspaceId}`),
@@ -236,8 +255,8 @@ export const credentialsApi = {
 
 // ---- Users API ----
 export const usersApi = {
-  updateMe: (data: { name?: string; avatarUrl?: string; notifications?: any }) =>
-    apiRequest<{ id: string; name: string; email: string; avatarUrl: string | null; notifications: any }>('/api/users/me', {
+  updateMe: (data: { name?: string; avatarUrl?: string; notifications?: NotificationPreferences }) =>
+    apiRequest<{ id: string; name: string; email: string; avatarUrl: string | null; notifications: NotificationPreferences | null }>('/api/users/me', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),

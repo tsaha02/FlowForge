@@ -52,14 +52,14 @@ export function initSocketIO(server: HTTPServer): SocketIOServer {
     // Join a room for a specific execution (so we can target updates)
     socket.on('join-execution', async (executionId: string) => {
       try {
-        socket.join(`execution:${executionId}`);
-        logger.info(`📡 [Socket.IO] Client ${socket.id} joined room execution:${executionId}`);
-
         // Catch-up: Send the current state immediately so the UI doesn't hang
         const exec = await prisma.execution.findUnique({
           where: { id: executionId },
           include: { nodeExecutions: { orderBy: { startedAt: 'asc' } } },
         });
+
+        socket.join(`execution:${executionId}`);
+        logger.info(`📡 [Socket.IO] Client ${socket.id} joined room execution:${executionId}`);
 
         if (exec) {
           socket.emit('execution:status', {

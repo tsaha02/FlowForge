@@ -55,7 +55,9 @@ export default function EditorPage() {
             description: data.description || '',
             status: data.status,
             triggerType: data.triggerType,
-            cronExpression: '',
+            cronExpression: data.cronExpression || '',
+            webhookPath: data.webhook?.path || null,
+            webhookActive: data.webhook?.isActive || false,
             nodes: (data.nodesJson as Node[]) || [],
             edges: (data.edgesJson as Edge[]) || [],
           });

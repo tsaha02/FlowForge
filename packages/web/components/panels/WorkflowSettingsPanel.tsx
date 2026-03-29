@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, AlertCircle, Save, CheckCircle2 } from 'lucide-react';
+import { X, AlertCircle, Save, CheckCircle2, Copy } from 'lucide-react';
 import { useWorkflowStore } from '@/stores/workflowStore';
 import { toast } from 'sonner';
 
@@ -25,21 +25,37 @@ interface Props { isOpen: boolean; onClose: () => void; }
 
 export default function WorkflowSettingsPanel({ isOpen, onClose }: Props) {
   const { meta, setMeta } = useWorkflowStore();
-  const [cronError, setCronError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    if (meta.triggerType === 'CRON') {
-      if (!meta.cronExpression)              setCronError('Cron expression is required');
-      else if (!CRON_REGEX.test(meta.cronExpression)) setCronError('Invalid cron format (e.g. "0 9 * * *")');
-      else                                             setCronError(null);
-    } else { setCronError(null); }
-  }, [meta.triggerType, meta.cronExpression]);
+  const webhookUrl = meta.webhookPath
+    ? `${(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000').replace(/\/$/, '')}/api/webhooks/${meta.webhookPath}`
+    : null;
+  const cronError =
+    meta.triggerType !== 'CRON'
+      ? null
+      : !meta.cronExpression
+        ? 'Cron expression is required'
+        : !CRON_REGEX.test(meta.cronExpression)
+          ? 'Invalid cron format (e.g. "0 9 * * *")'
+          : null;
 
   const handleDone = () => {
     if (cronError) { toast.error(cronError); return; }
     setSaved(true);
     setTimeout(() => { setSaved(false); onClose(); }, 800);
+  };
+
+  const handleCopyWebhook = async () => {
+    if (!webhookUrl) {
+      toast.error('Save the workflow first to generate a webhook URL');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(webhookUrl);
+      toast.success('Webhook URL copied');
+    } catch {
+      toast.error('Failed to copy webhook URL');
+    }
   };
 
   return (
@@ -137,8 +153,28 @@ export default function WorkflowSettingsPanel({ isOpen, onClose }: Props) {
                 <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 12, padding: '12px 14px' }}>
                   <p style={{ fontSize: 12, fontWeight: 700, color: '#15803D', margin: '0 0 6px' }}>Webhook Trigger</p>
                   <p style={{ fontSize: 12, color: '#16A34A', margin: 0, lineHeight: 1.5 }}>
-                    Once saved as ACTIVE, you'll receive a unique webhook URL to trigger this workflow via HTTP POST.
+                    {webhookUrl
+                      ? meta.webhookActive
+                        ? 'Use this endpoint to trigger the workflow via HTTP GET or POST.'
+                        : 'This webhook URL is reserved, but it will only accept traffic while the workflow is ACTIVE.'
+                      : 'Save this workflow to generate a dedicated webhook URL.'}
                   </p>
+                  {webhookUrl && (
+                    <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+                      <input
+                        type="text"
+                        readOnly
+                        value={webhookUrl}
+                        style={{ ...S.input(), flex: 1, fontFamily: 'ui-monospace, monospace', fontSize: 12, background: '#fff' }}
+                      />
+                      <button
+                        onClick={handleCopyWebhook}
+                        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0 12px', borderRadius: 10, border: '1px solid #86EFAC', background: '#DCFCE7', color: '#15803D', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
+                      >
+                        <Copy size={14} /> Copy
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
-import { encryptData, decryptData } from '../utils/encryption';
+import { encryptData } from '../utils/encryption';
 import { CredentialType } from '@prisma/client';
 import { z } from 'zod';
+import { AppError } from '../middleware/errorHandler';
 
 const router = Router();
 
@@ -21,9 +22,24 @@ const createSchema = z.object({
 router.get('/', async (req, res) => {
   try {
     const { workspaceId } = req.query;
+    const userId = (req as AuthRequest).userId!;
 
     if (!workspaceId || typeof workspaceId !== 'string') {
-      return res.status(400).json({ error: 'workspaceId is required' });
+      throw new AppError('workspaceId is required', 400);
+    }
+
+    const member = await prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId,
+          userId,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!member) {
+      throw new AppError('Workspace not found', 404);
     }
 
     const credentials = await prisma.credential.findMany({
@@ -41,8 +57,15 @@ router.get('/', async (req, res) => {
 
     res.json({ success: true, data: credentials });
   } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        error: { message: error.message },
+      });
+    }
+
     console.error('Error listing credentials:', error);
-    res.status(500).json({ error: 'Failed to list credentials' });
+    res.status(500).json({ success: false, error: { message: 'Failed to list credentials' } });
   }
 });
 
@@ -89,7 +112,7 @@ router.post('/', async (req, res) => {
     });
 
     res.status(201).json({ success: true, data: credential });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error creating credential:', error);
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors });

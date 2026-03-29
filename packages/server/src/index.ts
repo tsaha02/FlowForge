@@ -14,8 +14,7 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Load .env from the server directory first, then fall back to root
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
+// Load shared backend env from the repo root.
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 import express from 'express';
