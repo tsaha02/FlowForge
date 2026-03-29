@@ -94,6 +94,8 @@ export default function NodeConfigPanel() {
   const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000').replace(/\/$/, '');
   const webhookPathInput =
     typeDef?.type === 'webhook-trigger' && typeof config.path === 'string' ? config.path : '';
+  const webhookMethod =
+    typeDef?.type === 'webhook-trigger' && typeof config.method === 'string' ? config.method : 'POST';
   const webhookSlugPreview = webhookPathInput
     .trim()
     .toLowerCase()
@@ -261,7 +263,7 @@ export default function NodeConfigPanel() {
                         ? pendingWebhookPathChange
                           ? 'Save the workflow to apply your updated webhook path.'
                           : meta.webhookActive
-                            ? 'This is the active trigger URL for the workflow.'
+                            ? `This is the active trigger URL for the workflow. It currently accepts ${webhookMethod}.`
                             : 'This URL is reserved and will go live when the workflow is ACTIVE.'
                         : 'Save the workflow to generate its public trigger URL.'}
                     </p>

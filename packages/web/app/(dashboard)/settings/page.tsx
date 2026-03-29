@@ -323,7 +323,7 @@ export default function SettingsPage() {
               <motion.div key="workspace" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
                 <div style={C.section}>
                   <h2 style={C.secTitle}>Workspace Settings</h2>
-                  <p style={C.secSub}>Manage your team and project defaults.</p>
+                  <p style={C.secSub}>Rename this workspace or remove it if you no longer need it.</p>
                 </div>
 
                 <div style={{ padding: '0 32px 28px' }}>

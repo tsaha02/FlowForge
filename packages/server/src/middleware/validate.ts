@@ -11,13 +11,17 @@ import { logger } from '../utils/logger';
 export const validateRequest = (schema: AnyZodObject) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      // Parse the request body against the schema.
-      // parseAsync strips out any unknown fields not defined in the schema for security.
-      await schema.parseAsync({
+      // Parse request data and write the sanitized values back onto req so
+      // downstream handlers use the validated version, not the raw payload.
+      const parsed = await schema.parseAsync({
         body: req.body,
         query: req.query,
         params: req.params,
       });
+
+      req.body = parsed.body;
+      req.query = parsed.query;
+      req.params = parsed.params;
 
       next();
     } catch (error) {

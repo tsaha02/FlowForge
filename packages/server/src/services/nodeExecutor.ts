@@ -243,9 +243,27 @@ async function executeEmail(input: NodeExecutionInput): Promise<unknown> {
 // Requires DB_QUERY_CONNECTION_STRING env var.
 async function executeDbQuery(input: NodeExecutionInput): Promise<unknown> {
   const query = (input.config.query as string) || '';
+  const rawParams = input.config.params;
 
   if (!query) {
     throw new Error('DB Query node is missing a SQL query string.');
+  }
+
+  let params: unknown[] = [];
+  if (Array.isArray(rawParams)) {
+    params = rawParams;
+  } else if (typeof rawParams === 'string' && rawParams.trim()) {
+    try {
+      const parsedParams = JSON.parse(rawParams);
+      if (!Array.isArray(parsedParams)) {
+        throw new Error('Parameters JSON must be an array, like ["123", true]');
+      }
+      params = parsedParams;
+    } catch (error) {
+      throw new Error(
+        `DB Query parameters must be valid JSON array: ${error instanceof Error ? error.message : 'Invalid JSON'}`
+      );
+    }
   }
 
   const connectionString = input.credentials?.secret || input.credentials?.DB_QUERY_CONNECTION_STRING || process.env.DB_QUERY_CONNECTION_STRING;
@@ -266,10 +284,10 @@ async function executeDbQuery(input: NodeExecutionInput): Promise<unknown> {
     throw new Error('The "pg" package is not installed. Run: cd packages/server && npm install pg');
   }
   const pool = new Pool({ connectionString });
-  logger.info(`🗄️ [${input.label}] Executing query: ${query.slice(0, 80)}...`);
+  logger.info(`🗄️ [${input.label}] Executing query: ${query.slice(0, 80)}... (${params.length} params)`);
 
   try {
-    const result = await pool.query(query);
+    const result = await pool.query(query, params);
     await pool.end();
     logger.info(`🗄️ [${input.label}] Query returned ${result.rowCount} rows`);
     return {
@@ -277,6 +295,7 @@ async function executeDbQuery(input: NodeExecutionInput): Promise<unknown> {
       rows: result.rows,
       fields: result.fields.map((f: { name: string }) => f.name),
       query,
+      params,
     };
   } catch (err) {
     await pool.end();
@@ -290,6 +309,7 @@ async function executeAiLlm(input: NodeExecutionInput): Promise<unknown> {
   const promptTemplate = (input.config.prompt as string) || 'Process this input: {input}';
   const systemPrompt = (input.config.systemPrompt as string) || 'You are a helpful assistant integrated into an automated workflow.';
   const temperature = (input.config.temperature as number) ?? 0.7;
+  const outputFormat = (input.config.outputFormat as string) || 'text';
 
   const apiKey = input.credentials?.secret || input.credentials?.GROQ_API_KEY || process.env.GROQ_API_KEY;
 
@@ -309,20 +329,38 @@ async function executeAiLlm(input: NodeExecutionInput): Promise<unknown> {
     ? JSON.stringify(input.previousOutput, null, 2)
     : String(input.previousOutput || '');
   const finalPrompt = promptTemplate.replace(/\{input\}/g, inputDataStr);
+  const finalSystemPrompt =
+    outputFormat === 'json'
+      ? `${systemPrompt}\nReturn valid JSON only. Do not wrap the JSON in markdown fences or extra commentary.`
+      : systemPrompt;
 
   const messages = [
-    new SystemMessage(systemPrompt),
+    new SystemMessage(finalSystemPrompt),
     new HumanMessage(finalPrompt),
   ];
 
   const response = await chatModel.invoke(messages);
   logger.info(`🤖 [${input.label}] Groq response received`);
 
+  let responseBody: unknown = response.content;
+  if (outputFormat === 'json') {
+    if (typeof response.content !== 'string') {
+      throw new Error('AI node expected a JSON string response, but the model returned a non-text payload.');
+    }
+
+    try {
+      responseBody = JSON.parse(response.content);
+    } catch {
+      throw new Error('AI node was configured for JSON output, but the model returned invalid JSON.');
+    }
+  }
+
   return {
     model: modelName,
     provider: 'groq',
     prompt: finalPrompt,
-    response: response.content,
+    outputFormat,
+    response: responseBody,
     usage: response.response_metadata?.tokenUsage || { totalTokens: 0 },
   };
 }
@@ -334,8 +372,16 @@ async function executeDelay(input: NodeExecutionInput): Promise<unknown> {
   const unit = (input.config.unit as string) || 'seconds';
   let ms = duration * 1000;
   if (unit === 'minutes') ms = duration * 60000;
+  if (unit === 'hours') ms = duration * 3600000;
   if (unit === 'ms') ms = duration;
-  ms = Math.min(ms, 60000); // Hard cap at 60s to prevent job timeouts
+
+  if (duration <= 0 || Number.isNaN(duration)) {
+    throw new Error('Delay duration must be greater than 0.');
+  }
+
+  if (ms > 60000) {
+    throw new Error('Delay node currently supports waits up to 60 seconds. For longer schedules, use a Cron trigger.');
+  }
 
   logger.info(`⏱️ [${input.label}] Waiting ${duration} ${unit} (${ms}ms)`);
   await new Promise((resolve) => setTimeout(resolve, ms));

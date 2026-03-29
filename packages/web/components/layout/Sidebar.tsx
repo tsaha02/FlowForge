@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Zap, LayoutDashboard, GitBranch, Play, Key, Settings, LogOut, ChevronLeft, ChevronRight,
+  Zap, LayoutDashboard, GitBranch, Play, Key, Settings, LogOut, ChevronLeft, ChevronRight, BookOpen,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
@@ -23,6 +23,7 @@ const navItems = [
   { label: 'Workflows',   href: '/workflows',   icon: GitBranch },
   { label: 'Executions',  href: '/executions',  icon: Play },
   { label: 'Credentials', href: '/credentials', icon: Key },
+  { label: 'Manual',      href: '/manual',      icon: BookOpen },
   { label: 'Settings',    href: '/settings',    icon: Settings },
 ];
 

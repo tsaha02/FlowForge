@@ -109,7 +109,7 @@ export default function WorkflowSettingsPanel({ isOpen, onClose }: Props) {
                   <option value="PAUSED">Paused</option>
                   <option value="ARCHIVED">Archived</option>
                 </select>
-                <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 6 }}>ACTIVE workflows will be triggered automatically based on their trigger type.</p>
+                <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 6 }}>ACTIVE workflows will trigger automatically. Scheduled workflows also need the backend worker and Redis online.</p>
               </div>
 
               {/* Trigger type */}
@@ -155,7 +155,7 @@ export default function WorkflowSettingsPanel({ isOpen, onClose }: Props) {
                   <p style={{ fontSize: 12, color: '#16A34A', margin: 0, lineHeight: 1.5 }}>
                     {webhookUrl
                       ? meta.webhookActive
-                        ? 'Use this endpoint to trigger the workflow via HTTP GET or POST.'
+                        ? 'Use this endpoint to trigger the workflow via the HTTP method selected on the Webhook Trigger node.'
                         : 'This webhook URL is reserved, but it will only accept traffic while the workflow is ACTIVE.'
                       : 'Save this workflow to generate a dedicated webhook URL.'}
                   </p>

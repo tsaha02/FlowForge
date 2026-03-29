@@ -93,7 +93,7 @@ export const NODE_TYPES: Record<string, NodeTypeDefinition> = {
   'db-query': {
     type: 'db-query',
     label: 'Database Query',
-    description: 'Execute a SQL query on a database',
+    description: 'Execute a SQL query on a Postgres database',
     icon: '🗄️',
     color: '#F59E0B', // amber
     category: 'actions',
@@ -109,19 +109,20 @@ export const NODE_TYPES: Record<string, NodeTypeDefinition> = {
   'ai-llm': {
     type: 'ai-llm',
     label: 'AI / LLM',
-    description: 'Run a prompt through an AI model (GPT-4)',
+    description: 'Run a prompt through a Groq-hosted AI model',
     icon: '🤖',
     color: '#10B981', // emerald
     category: 'integrations',
     inputs: 1,
     outputs: 1,
     fields: [
-      { name: 'prompt', label: 'Prompt Template', type: 'textarea', placeholder: 'Summarize the following: {{input}}', required: true },
+      { name: 'systemPrompt', label: 'System Prompt', type: 'textarea', placeholder: 'You are a helpful assistant that summarizes customer messages.' },
+      { name: 'prompt', label: 'Prompt Template', type: 'textarea', placeholder: 'Summarize the following: {input}', required: true },
       { name: 'model', label: 'Model', type: 'select', options: [
-        { label: 'GPT-4', value: 'gpt-4' },
-        { label: 'GPT-4 Turbo', value: 'gpt-4-turbo' },
-        { label: 'GPT-3.5 Turbo', value: 'gpt-3.5-turbo' },
-      ], defaultValue: 'gpt-4' },
+        { label: 'Llama 3.1 8B Instant', value: 'llama-3.1-8b-instant' },
+        { label: 'Llama 3.3 70B Versatile', value: 'llama-3.3-70b-versatile' },
+        { label: 'Mixtral 8x7B', value: 'mixtral-8x7b-32768' },
+      ], defaultValue: 'llama-3.1-8b-instant' },
       { name: 'temperature', label: 'Temperature', type: 'number', defaultValue: 0.7 },
       { name: 'outputFormat', label: 'Output Format', type: 'select', options: [
         { label: 'Text', value: 'text' },
@@ -133,7 +134,7 @@ export const NODE_TYPES: Record<string, NodeTypeDefinition> = {
   'delay': {
     type: 'delay',
     label: 'Delay / Timer',
-    description: 'Wait for a specified duration before continuing',
+    description: 'Wait up to 60 seconds before continuing',
     icon: '⏱️',
     color: '#6366F1', // indigo
     category: 'logic',
@@ -144,7 +145,6 @@ export const NODE_TYPES: Record<string, NodeTypeDefinition> = {
       { name: 'unit', label: 'Unit', type: 'select', options: [
         { label: 'Seconds', value: 'seconds' },
         { label: 'Minutes', value: 'minutes' },
-        { label: 'Hours', value: 'hours' },
       ], defaultValue: 'seconds' },
     ],
   },
@@ -209,7 +209,7 @@ export const NODE_TYPES: Record<string, NodeTypeDefinition> = {
   'code-execute': {
     type: 'code-execute',
     label: 'Code Execute',
-    description: 'Run custom JavaScript code in a sandboxed environment',
+    description: 'Run custom JavaScript code using the previous node output as input',
     icon: '💻',
     color: '#64748B', // slate
     category: 'logic',
