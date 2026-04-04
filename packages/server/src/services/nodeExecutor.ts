@@ -220,9 +220,10 @@ async function executeEmail(input: NodeExecutionInput): Promise<unknown> {
     socketTimeout: 30000,     // 30s of inactivity before giving up
   });
 
-  let info: Awaited<ReturnType<typeof transporter.sendMail>>;
-  try {
-    info = await transporter.sendMail({
+  // .finally() closes the SMTP socket whether sendMail succeeds or throws.
+  // Without this, nodemailer v7 leaves the connection open and the worker hangs.
+  const info = await transporter
+    .sendMail({
       from: `"FlowForge" <${smtpFrom}>`,
       to,
       subject,
@@ -232,11 +233,8 @@ async function executeEmail(input: NodeExecutionInput): Promise<unknown> {
                <hr style="margin-top:32px;border-color:#e2e8f0">
                <p style="color:#94a3b8;font-size:12px">Sent by FlowForge Automation</p>
              </div>`,
-    });
-  } finally {
-    // Always close the SMTP connection — prevents socket leaks in nodemailer v7.
-    transporter.close();
-  }
+    })
+    .finally(() => transporter.close());
 
   logger.info(`📧 [${input.label}] Email sent! Message ID: ${info.messageId}`);
 
