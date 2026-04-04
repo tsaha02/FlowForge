@@ -168,8 +168,16 @@ async function executeHttpRequest(input: NodeExecutionInput): Promise<unknown> {
 }
 
 // ---- Email ----
-// Sends a REAL email using Nodemailer + SMTP credentials from .env.
-// Supports Gmail App Passwords (SMTP_USER + SMTP_PASS).
+// Two transport strategies, auto-selected based on available env vars:
+//
+//   Strategy A — Resend HTTP API (recommended for cloud deployments like Render,
+//                Railway, Vercel, etc. where SMTP ports are blocked by the host).
+//                Set RESEND_API_KEY in .env to activate.
+//
+//   Strategy B — SMTP via Nodemailer (works locally, on VPS, or any host that
+//                allows outbound port 587/465). Set SMTP_USER + SMTP_PASS in .env.
+//
+// If RESEND_API_KEY is present, Strategy A is used; otherwise Strategy B.
 async function executeEmail(input: NodeExecutionInput): Promise<unknown> {
   const to = (input.config.to as string) || '';
   const subject = (input.config.subject as string) || 'No Subject';
@@ -179,6 +187,48 @@ async function executeEmail(input: NodeExecutionInput): Promise<unknown> {
     throw new Error('Email node is missing a recipient address. Please configure "To" in the node settings.');
   }
 
+  // Interpolate {input} placeholder in the body
+  const inputStr = typeof input.previousOutput === 'object'
+    ? JSON.stringify(input.previousOutput, null, 2)
+    : String(input.previousOutput || '');
+  const htmlBody = bodyTemplate.replace(/\{input\}/g, inputStr);
+  const htmlWrapped = `<div style="font-family:sans-serif;max-width:600px;margin:auto">
+    ${htmlBody.replace(/\n/g, '<br>')}
+    <hr style="margin-top:32px;border-color:#e2e8f0">
+    <p style="color:#94a3b8;font-size:12px">Sent by FlowForge Automation</p>
+  </div>`;
+  const textBody = htmlBody.replace(/<[^>]+>/g, '');
+
+  // ── Strategy A: Resend HTTP API ──────────────────────────────────────────
+  const resendApiKey = input.credentials?.RESEND_API_KEY || process.env.RESEND_API_KEY;
+
+  if (resendApiKey) {
+    const fromAddress = input.credentials?.RESEND_FROM || process.env.RESEND_FROM || 'FlowForge <onboarding@resend.dev>';
+    logger.info(`📧 [${input.label}] Sending via Resend API to "${to}"`);
+
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${resendApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ from: fromAddress, to: [to], subject, html: htmlWrapped, text: textBody }),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    const result = await response.json() as { id?: string; name?: string; message?: string };
+
+    if (!response.ok) {
+      throw new Error(`Resend API error ${response.status}: ${result.message || result.name || 'Unknown error'}`);
+    }
+
+    logger.info(`📧 [${input.label}] Email sent via Resend! ID: ${result.id}`);
+    return { sent: true, to, subject, messageId: result.id, provider: 'resend', timestamp: new Date().toISOString() };
+  }
+
+  // ── Strategy B: SMTP via Nodemailer ──────────────────────────────────────
+  // Note: many cloud platforms (Render, Railway, Heroku free tier) block outbound
+  // SMTP port 587/465. If you see "Connection timeout", set RESEND_API_KEY instead.
   const smtpUser = input.credentials?.SMTP_USER || process.env.SMTP_USER;
   const smtpPass = input.credentials?.SMTP_PASS || process.env.SMTP_PASS;
   const smtpHost = input.credentials?.SMTP_HOST || process.env.SMTP_HOST || 'smtp.gmail.com';
@@ -187,65 +237,42 @@ async function executeEmail(input: NodeExecutionInput): Promise<unknown> {
 
   if (!smtpUser || !smtpPass) {
     throw new Error(
-      'Email node requires SMTP credentials. ' +
-      'Add SMTP_USER and SMTP_PASS to the root .env file. ' +
-      'For Gmail, create an App Password at myaccount.google.com/apppasswords'
+      'Email node has no sending credentials. ' +
+      'Option 1 (cloud): Add RESEND_API_KEY to .env (get a free key at resend.com). ' +
+      'Option 2 (local/VPS): Add SMTP_USER and SMTP_PASS to .env.'
     );
   }
 
-  // Interpolate {input} placeholder in the body
-  const inputStr = typeof input.previousOutput === 'object'
-    ? JSON.stringify(input.previousOutput, null, 2)
-    : String(input.previousOutput || '');
-  const htmlBody = bodyTemplate.replace(/\{input\}/g, inputStr);
-
-  logger.info(`📧 [${input.label}] Sending email via ${smtpHost}:${smtpPort} to "${to}"`);
+  logger.info(`📧 [${input.label}] Sending via SMTP (${smtpHost}:${smtpPort}) to "${to}"`);
 
   const transporter = nodemailer.createTransport({
     host: smtpHost,
     port: smtpPort,
-    // Port 465 = implicit TLS (SSL from the start).
-    // Port 587 = STARTTLS (starts plain, upgrades to TLS).
+    // Port 465 = implicit TLS. Port 587 = STARTTLS (starts plain, upgrades to TLS).
     secure: smtpPort === 465,
-    // requireTLS ensures nodemailer MUST upgrade to TLS via STARTTLS on port 587.
-    // Without this, if STARTTLS negotiation hiccups, nodemailer silently falls back
-    // to plain auth — Gmail then rejects with "Authentication Required".
+    // requireTLS forces the STARTTLS upgrade on port 587 before any auth is sent.
+    // Without it, nodemailer can silently fall back to plain auth, which Gmail rejects.
     requireTLS: smtpPort !== 465,
-    auth: {
-      user: smtpUser,
-      pass: smtpPass,
-    },
-    connectionTimeout: 15000, // 15s to establish TCP connection
-    greetingTimeout: 15000,   // 15s to receive SMTP greeting
-    socketTimeout: 30000,     // 30s of inactivity before giving up
+    auth: { user: smtpUser, pass: smtpPass },
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 30000,
   });
 
-  // .finally() closes the SMTP socket whether sendMail succeeds or throws.
-  // Without this, nodemailer v7 leaves the connection open and the worker hangs.
+  // .finally() ensures the SMTP socket is always closed — prevents connection leaks
+  // in nodemailer v7 where the socket can linger after sendMail resolves.
   const info = await transporter
     .sendMail({
       from: `"FlowForge" <${smtpFrom}>`,
       to,
       subject,
-      text: htmlBody.replace(/<[^>]+>/g, ''),
-      html: `<div style="font-family:sans-serif;max-width:600px;margin:auto">
-               ${htmlBody.replace(/\n/g, '<br>')}
-               <hr style="margin-top:32px;border-color:#e2e8f0">
-               <p style="color:#94a3b8;font-size:12px">Sent by FlowForge Automation</p>
-             </div>`,
+      text: textBody,
+      html: htmlWrapped,
     })
     .finally(() => transporter.close());
 
-  logger.info(`📧 [${input.label}] Email sent! Message ID: ${info.messageId}`);
-
-  return {
-    sent: true,
-    to,
-    subject,
-    messageId: info.messageId,
-    accepted: info.accepted,
-    timestamp: new Date().toISOString(),
-  };
+  logger.info(`📧 [${input.label}] Email sent via SMTP! Message ID: ${info.messageId}`);
+  return { sent: true, to, subject, messageId: info.messageId, accepted: info.accepted, provider: 'smtp', timestamp: new Date().toISOString() };
 }
 
 // ---- DB Query ----
