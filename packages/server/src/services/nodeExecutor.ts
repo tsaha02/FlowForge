@@ -199,32 +199,44 @@ async function executeEmail(input: NodeExecutionInput): Promise<unknown> {
     : String(input.previousOutput || '');
   const htmlBody = bodyTemplate.replace(/\{input\}/g, inputStr);
 
-  logger.info(`📧 [${input.label}] Sending email via ${smtpHost} to "${to}"`);
+  logger.info(`📧 [${input.label}] Sending email via ${smtpHost}:${smtpPort} to "${to}"`);
 
   const transporter = nodemailer.createTransport({
     host: smtpHost,
     port: smtpPort,
+    // Port 465 = implicit TLS (SSL from the start).
+    // Port 587 = STARTTLS (starts plain, upgrades to TLS).
     secure: smtpPort === 465,
+    // requireTLS ensures nodemailer MUST upgrade to TLS via STARTTLS on port 587.
+    // Without this, if STARTTLS negotiation hiccups, nodemailer silently falls back
+    // to plain auth — Gmail then rejects with "Authentication Required".
+    requireTLS: smtpPort !== 465,
     auth: {
       user: smtpUser,
       pass: smtpPass,
     },
-    connectionTimeout: 10000, // 10s to connect
-    greetingTimeout: 10000,   // 10s for greeting
-    socketTimeout: 20000,     // 20s for data
+    connectionTimeout: 15000, // 15s to establish TCP connection
+    greetingTimeout: 15000,   // 15s to receive SMTP greeting
+    socketTimeout: 30000,     // 30s of inactivity before giving up
   });
 
-  const info = await transporter.sendMail({
-    from: `"FlowForge" <${smtpFrom}>`,
-    to,
-    subject,
-    text: htmlBody.replace(/<[^>]+>/g, ''),
-    html: `<div style="font-family:sans-serif;max-width:600px;margin:auto">
-             ${htmlBody.replace(/\n/g, '<br>')}
-             <hr style="margin-top:32px;border-color:#e2e8f0">
-             <p style="color:#94a3b8;font-size:12px">Sent by FlowForge Automation</p>
-           </div>`,
-  });
+  let info: Awaited<ReturnType<typeof transporter.sendMail>>;
+  try {
+    info = await transporter.sendMail({
+      from: `"FlowForge" <${smtpFrom}>`,
+      to,
+      subject,
+      text: htmlBody.replace(/<[^>]+>/g, ''),
+      html: `<div style="font-family:sans-serif;max-width:600px;margin:auto">
+               ${htmlBody.replace(/\n/g, '<br>')}
+               <hr style="margin-top:32px;border-color:#e2e8f0">
+               <p style="color:#94a3b8;font-size:12px">Sent by FlowForge Automation</p>
+             </div>`,
+    });
+  } finally {
+    // Always close the SMTP connection — prevents socket leaks in nodemailer v7.
+    transporter.close();
+  }
 
   logger.info(`📧 [${input.label}] Email sent! Message ID: ${info.messageId}`);
 
