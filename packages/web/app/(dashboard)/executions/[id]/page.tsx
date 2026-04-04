@@ -3,55 +3,33 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, CheckCircle2, XCircle, Activity, Clock, Calendar, Box, Code, GitBranch } from 'lucide-react';
+import {
+  ArrowLeft, CheckCircle2, XCircle, Activity, Clock, Calendar,
+  Code, GitBranch, Box, AlertTriangle, Zap,
+} from 'lucide-react';
 import { executionApi, Execution } from '@/lib/api';
 import { ReactFlow, Controls, Background, Edge, Node } from '@xyflow/react';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 import '@xyflow/react/dist/style.css';
 
-// ─── Style constants ────────────────────────────────────────
-const S = {
-  page:      { minHeight: '100vh', background: '#F1F5F9' } as React.CSSProperties,
-  backBtn:   (hov: boolean): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 10, border: 'none', background: hov ? '#F1F5F9' : 'transparent', color: hov ? '#0F172A' : '#64748B', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', marginBottom: 20 }),
-  heroBox:   (color: string, bg: string, border: string): React.CSSProperties => ({ background: bg, border: `1.5px solid ${border}`, borderRadius: 20, padding: '24px 28px', marginBottom: 24, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' as const }),
-  metaChip:  { background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(8px)', borderRadius: 12, padding: '10px 16px', border: '1px solid rgba(255,255,255,0.6)', minWidth: 120 } as React.CSSProperties,
-  metaLabel: { fontSize: 10, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: '#64748B', marginBottom: 4 },
-  metaValue: { fontSize: 13, fontWeight: 600, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 6 } as React.CSSProperties,
-  grid:      { display: 'grid', gridTemplateColumns: '1fr 380px', gap: 24, alignItems: 'start' } as React.CSSProperties,
-  sectionH:  { fontSize: 15, fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 } as React.CSSProperties,
-  nodeCard:  (sel: boolean, hov: boolean): React.CSSProperties => ({ background: '#fff', borderRadius: 16, border: sel ? '1.5px solid #3B82F6' : (hov ? '1.5px solid #CBD5E1' : '1.5px solid #E2E8F0'), padding: '16px 20px', cursor: 'pointer', boxShadow: sel ? '0 0 0 3px rgba(59,130,246,0.12)' : (hov ? '0 2px 8px rgba(0,0,0,0.06)' : '0 1px 3px rgba(0,0,0,0.04)'), transition: 'all 0.15s', marginBottom: 10 }),
-  statusDot: (success: boolean, failed: boolean): React.CSSProperties => ({ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${success ? '#BBF7D0' : failed ? '#FECACA' : '#BFDBFE'}`, background: success ? '#F0FDF4' : failed ? '#FEF2F2' : '#EFF6FF' }),
-  inspector: { background: '#0F172A', borderRadius: 20, border: '1px solid #1E293B', overflow: 'hidden', position: 'sticky' as const, top: 24, boxShadow: '0 8px 24px rgba(0,0,0,0.24)' } as React.CSSProperties,
-  inspHdr:   { background: '#1E293B', padding: '14px 18px', borderBottom: '1px solid #334155', display: 'flex', alignItems: 'center', gap: 10 } as React.CSSProperties,
-  inspBody:  { padding: 16, height: 560, overflowY: 'auto' as const } as React.CSSProperties,
+const STATUS_CONFIG: Record<string, { color: string; bg: string; border: string; label: string }> = {
+  COMPLETED: { color: '#16A34A', bg: 'rgba(22,163,74,0.06)',  border: 'rgba(22,163,74,0.18)',  label: 'Completed' },
+  FAILED:    { color: '#DC2626', bg: 'rgba(220,38,38,0.06)', border: 'rgba(220,38,38,0.18)', label: 'Failed'    },
+  RUNNING:   { color: '#2563EB', bg: 'rgba(37,99,235,0.06)', border: 'rgba(37,99,235,0.18)', label: 'Running'   },
+  PENDING:   { color: '#D97706', bg: 'rgba(217,119,6,0.06)', border: 'rgba(217,119,6,0.18)', label: 'Pending'   },
 };
 
-const STATUS_CONFIG: Record<string, { color: string; bg: string; border: string }> = {
-  COMPLETED: { color: '#15803D', bg: '#F0FDF4', border: '#BBF7D0' },
-  FAILED:    { color: '#DC2626', bg: '#FEF2F2', border: '#FECACA' },
-  RUNNING:   { color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' },
-  PENDING:   { color: '#D97706', bg: '#FFFBEB', border: '#FDE68A' },
-};
-
-interface FlowReplayNode {
-  id: string;
-  position: { x: number; y: number };
-  data?: { label?: string };
-}
-
-interface FlowReplayEdge {
-  id: string;
-  source: string;
-  target: string;
-}
+interface FlowReplayNode { id: string; position: { x: number; y: number }; data?: { label?: string } }
+interface FlowReplayEdge { id: string; source: string; target: string }
 
 export default function ExecutionDetailPage() {
   const { id: executionId } = useParams() as { id: string };
   const router = useRouter();
   const [execution, setExecution] = useState<Execution | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading]   = useState(true);
   const [selectedNode, setSelectedNode] = useState<any>(null);
   const [hovBack, setHovBack] = useState(false);
-  const [hovNode, setHovNode] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -67,75 +45,72 @@ export default function ExecutionDetailPage() {
 
   if (isLoading) {
     return (
-      <div style={{ ...S.page, padding: '32px' }}>
-        {[1,2,3].map(i => <div key={i} style={{ height: 80, background: '#fff', borderRadius: 16, border: '1.5px solid #E2E8F0', marginBottom: 16, opacity: 0.5 }} />)}
+      <div style={{ minHeight: '100vh', background: 'var(--surface-page)', padding: '32px' }}>
+        {[180, 500, 80].map((h, i) => (
+          <div key={i} className="ff-skeleton" style={{ height: h, borderRadius: 'var(--radius-lg)', marginBottom: 16 }} />
+        ))}
       </div>
     );
   }
+
   if (!execution) {
-    return <div style={{ padding: 32, textAlign: 'center', color: '#64748B', fontSize: 14 }}>Execution not found.</div>;
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--surface-page)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ width: 52, height: 52, background: 'var(--surface-subtle)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <Box size={22} color="var(--text-muted)" />
+          </div>
+          <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>Execution not found</p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 20px' }}>This execution may have been deleted.</p>
+          <button onClick={() => router.push('/executions')} style={{
+            padding: '8px 18px', background: 'var(--brand)', color: '#fff',
+            border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+          }}>
+            Back to Executions
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const isSuccess = execution.status === 'COMPLETED';
   const isFailed  = execution.status === 'FAILED';
   const isRunning = !isSuccess && !isFailed;
   const cfg = STATUS_CONFIG[execution.status] || STATUS_CONFIG.RUNNING;
+
   const workflowNodes = Array.isArray(execution.workflow?.nodesJson)
-    ? (execution.workflow.nodesJson as FlowReplayNode[])
-    : [];
+    ? (execution.workflow.nodesJson as FlowReplayNode[]) : [];
   const workflowEdges = Array.isArray(execution.workflow?.edgesJson)
-    ? (execution.workflow.edgesJson as FlowReplayEdge[])
-    : [];
+    ? (execution.workflow.edgesJson as FlowReplayEdge[]) : [];
 
-  // Compute Read-Only Flow graph
-  const rfNodes: Node[] = workflowNodes.map((n) => {
+  const rfNodes: Node[] = workflowNodes.map(n => {
     const log = execution.nodeExecutions?.find(ne => ne.nodeId === n.id);
-    let borderColor = '#E2E8F0';
-    let bg = '#ffffff';
-    const opacity = log ? 1 : 0.4;
-    
-    if (log?.status === 'SUCCESS')   { borderColor = '#16A34A'; bg = '#F0FDF4'; }
-    if (log?.status === 'FAILED')    { borderColor = '#DC2626'; bg = '#FEF2F2'; }
-    if (log?.status === 'RUNNING')   { borderColor = '#2563EB'; bg = '#EFF6FF'; }
-
+    let borderColor = '#334155'; let bg = '#1E293B';
+    if (log?.status === 'SUCCESS') { borderColor = '#16A34A'; bg = 'rgba(22,163,74,0.12)'; }
+    if (log?.status === 'FAILED')  { borderColor = '#DC2626'; bg = 'rgba(220,38,38,0.12)'; }
+    if (log?.status === 'RUNNING') { borderColor = '#3B82F6'; bg = 'rgba(59,130,246,0.12)'; }
     const isSelected = selectedNode?.id === n.id || selectedNode?.nodeId === n.id;
-
     return {
-      id: n.id,
-      position: n.position,
-      type: 'default', // Fallback to safe default renderer
-      data: { label: <div style={{ fontWeight: 600, fontSize: 13, color: '#0F172A' }}>{n.data?.label || 'Node'}</div> },
-      draggable: false,
-      selectable: true,
+      id: n.id, position: n.position, type: 'default',
+      data: { label: <div style={{ fontWeight: 600, fontSize: 12, color: '#F1F5F9' }}>{n.data?.label || 'Node'}</div> },
+      draggable: false, selectable: true,
       style: {
-        background: bg,
-        border: `2.5px solid ${borderColor}`,
-        borderRadius: 12,
-        padding: '12px 20px',
-        boxShadow: isSelected ? `0 0 0 4px ${borderColor}30` : '0 1px 4px rgba(0,0,0,0.06)',
-        opacity,
-        minWidth: 160,
-        textAlign: 'center',
-        cursor: 'pointer',
+        background: bg, border: `2px solid ${isSelected ? '#60A5FA' : borderColor}`,
+        borderRadius: 10, padding: '10px 18px',
+        boxShadow: isSelected ? '0 0 0 3px rgba(96,165,250,0.25)' : '0 2px 6px rgba(0,0,0,0.3)',
+        opacity: log ? 1 : 0.35, minWidth: 150, textAlign: 'center', cursor: 'pointer',
         transition: 'all 0.2s',
-      }
+      },
     };
   });
 
-  const rfEdges: Edge[] = workflowEdges.map((e) => {
-    // Determine target node status to color the edge
+  const rfEdges: Edge[] = workflowEdges.map(e => {
     const targetLog = execution.nodeExecutions?.find(ne => ne.nodeId === e.target);
-    let edgeColor = '#94A3B8';
-    let animated = false;
+    let edgeColor = '#334155'; let animated = false;
     if (targetLog?.status === 'SUCCESS') edgeColor = '#16A34A';
     if (targetLog?.status === 'FAILED')  edgeColor = '#DC2626';
-    if (targetLog?.status === 'RUNNING') { edgeColor = '#2563EB'; animated = true; }
-
-    return {
-      ...e,
-      animated,
-      style: { stroke: edgeColor, strokeWidth: 2.5 },
-    };
+    if (targetLog?.status === 'RUNNING') { edgeColor = '#3B82F6'; animated = true; }
+    return { ...e, animated, style: { stroke: edgeColor, strokeWidth: 2 } };
   });
 
   const handleNodeClick = (_: any, node: Node) => {
@@ -144,125 +119,298 @@ export default function ExecutionDetailPage() {
   };
 
   return (
-    <div style={S.page}>
-      <div style={{ padding: '28px 32px' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--surface-page)', fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ padding: '28px 32px', maxWidth: 1400, margin: '0 auto' }}>
+
         {/* Back */}
-        <button style={S.backBtn(hovBack)} onMouseEnter={() => setHovBack(true)} onMouseLeave={() => setHovBack(false)} onClick={() => router.push('/executions')}>
-          <ArrowLeft size={15} /> Back to Executions
+        <button
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 7,
+            padding: '7px 14px', marginBottom: 20,
+            background: hovBack ? 'var(--surface-hover)' : 'transparent',
+            border: '1px solid ' + (hovBack ? 'var(--border)' : 'transparent'),
+            borderRadius: 'var(--radius-md)', color: hovBack ? 'var(--text-secondary)' : 'var(--text-muted)',
+            fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+          }}
+          onMouseEnter={() => setHovBack(true)}
+          onMouseLeave={() => setHovBack(false)}
+          onClick={() => router.push('/executions')}
+        >
+          <ArrowLeft size={14} /> Back to Executions
         </button>
 
-        {/* Hero header */}
-        <div style={S.heroBox(cfg.color, cfg.bg, cfg.border)}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-              {isSuccess ? <CheckCircle2 size={32} color="#16A34A" /> : isFailed ? <XCircle size={32} color="#DC2626" /> : <Activity size={32} color="#2563EB" />}
-              <h1 style={{ fontSize: 26, fontWeight: 800, color: '#0F172A', margin: 0 }}>{execution.workflow?.name || 'Workflow Run'}</h1>
+        {/* ── Hero header ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+          style={{
+            background: 'var(--surface-card)',
+            border: `1px solid ${cfg.border}`,
+            borderRadius: 'var(--radius-lg)',
+            padding: '24px 28px',
+            marginBottom: 24,
+            boxShadow: 'var(--shadow-sm)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
+            {/* Left: title + ID */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: 'var(--radius-md)', flexShrink: 0,
+                background: cfg.bg, border: `1px solid ${cfg.border}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {isSuccess
+                  ? <CheckCircle2 size={24} color={cfg.color} />
+                  : isFailed
+                  ? <XCircle size={24} color={cfg.color} />
+                  : <Activity size={24} color={cfg.color} />}
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                  <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.025em', margin: 0 }}>
+                    {execution.workflow?.name || 'Workflow Run'}
+                  </h1>
+                  <span style={{
+                    padding: '3px 10px', borderRadius: 'var(--radius-full)',
+                    fontSize: 11, fontWeight: 700, letterSpacing: '0.02em',
+                    background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`,
+                  }}>
+                    {cfg.label}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                    ID: {execution.id}
+                  </span>
+                  {execution.triggeredBy && (
+                    <>
+                      <span style={{ color: 'var(--border)' }}>·</span>
+                      <span style={{
+                        padding: '2px 8px', background: 'var(--surface-subtle)',
+                        borderRadius: 'var(--radius-full)', fontSize: 10,
+                        fontWeight: 700, color: 'var(--text-muted)',
+                        textTransform: 'uppercase', letterSpacing: '0.06em',
+                        border: '1px solid var(--border)',
+                      }}>
+                        {execution.triggeredBy}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#64748B' }}>ID: {execution.id}</span>
-              <span style={{ color: '#CBD5E1' }}>•</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 10px', borderRadius: 100, fontSize: 11, fontWeight: 700, background: 'rgba(255,255,255,0.7)', color: cfg.color, border: `1px solid ${cfg.border}` }}>
-                {execution.status}
-              </span>
+
+            {/* Right: meta chips */}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{
+                background: 'var(--surface-subtle)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)', padding: '10px 16px', minWidth: 110,
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: 5 }}>Duration</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  <Clock size={13} color="var(--text-muted)" />
+                  {execution.duration ? `${execution.duration}ms` : isRunning ? 'Running…' : '—'}
+                </div>
+              </div>
+              <div style={{
+                background: 'var(--surface-subtle)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)', padding: '10px 16px', minWidth: 150,
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: 5 }}>Started</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  <Calendar size={13} color="var(--text-muted)" />
+                  {new Date(execution.startedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+              {execution.nodeExecutions && (
+                <div style={{
+                  background: 'var(--surface-subtle)', border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-md)', padding: '10px 16px', minWidth: 100,
+                }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: 5 }}>Nodes</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                    <Zap size={13} color="var(--brand)" />
+                    {execution.nodeExecutions.length}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <div style={S.metaChip}>
-              <div style={S.metaLabel}>Duration</div>
-              <div style={S.metaValue}><Clock size={13} color="#94A3B8" /> {execution.duration ? `${execution.duration}ms` : 'Running...'}</div>
-            </div>
-            <div style={S.metaChip}>
-              <div style={S.metaLabel}>Started</div>
-              <div style={S.metaValue}><Calendar size={13} color="#94A3B8" /> {new Date(execution.startedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
-            </div>
-          </div>
-
+          {/* Fatal error banner */}
           {isFailed && execution.errorMessage && (
-            <div style={{ width: '100%', background: 'rgba(255,255,255,0.7)', borderRadius: 12, padding: '12px 16px', border: '1px solid #FECACA' }}>
-              <p style={{ fontSize: 10, fontWeight: 700, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 4px' }}>Fatal Error</p>
-              <p style={{ fontSize: 13, color: '#B91C1C', margin: 0 }}>{execution.errorMessage}</p>
+            <div style={{
+              marginTop: 20,
+              background: 'rgba(220,38,38,0.06)',
+              border: '1px solid rgba(220,38,38,0.18)',
+              borderRadius: 'var(--radius-md)',
+              padding: '12px 16px',
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+            }}>
+              <AlertTriangle size={15} color="#DC2626" style={{ flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <p style={{ fontSize: 10, fontWeight: 700, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 4px' }}>Fatal Error</p>
+                <p style={{ fontSize: 13, color: '#B91C1C', margin: 0, lineHeight: 1.5 }}>{execution.errorMessage}</p>
+              </div>
             </div>
           )}
-        </div>
+        </motion.div>
 
-        {/* Two column grid */}
-        <div style={S.grid}>
-          {/* Left: Visual Graph Replay */}
-          <div style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 20, height: 600, overflow: 'hidden', position: 'relative' }}>
-            <div style={{ position: 'absolute', top: 16, left: 16, zIndex: 10, background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(8px)', padding: '8px 14px', borderRadius: 10, border: '1px solid #E2E8F0', fontSize: 13, fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}>
-              <GitBranch size={16} color="#3B82F6" /> Visual Graph Replay
+        {/* ── Two-column grid ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 20, alignItems: 'start' }}>
+
+          {/* Left: Visual Graph */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.3 }}
+            style={{
+              background: '#0D1526',
+              border: '1px solid #1E293B',
+              borderRadius: 'var(--radius-lg)',
+              height: 580,
+              overflow: 'hidden',
+              position: 'relative',
+              boxShadow: 'var(--shadow-md)',
+            }}
+          >
+            {/* Overlay label */}
+            <div style={{
+              position: 'absolute', top: 14, left: 14, zIndex: 10,
+              background: 'rgba(13,21,38,0.85)', backdropFilter: 'blur(8px)',
+              padding: '7px 12px', borderRadius: 'var(--radius-sm)',
+              border: '1px solid #1E293B',
+              display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 12, fontWeight: 700, color: '#94A3B8',
+            }}>
+              <GitBranch size={13} color="#3B82F6" /> Visual Graph Replay
             </div>
-            
+
             <ReactFlow
               nodes={rfNodes}
               edges={rfEdges}
               onNodeClick={handleNodeClick}
               fitView
-              fitViewOptions={{ padding: 0.2 }}
-              minZoom={0.5}
-              maxZoom={1.5}
+              fitViewOptions={{ padding: 0.25 }}
+              minZoom={0.4}
+              maxZoom={2}
             >
-              <Background color="#CBD5E1" gap={24} size={1.5} />
-              <Controls showInteractive={false} />
+              <Background color="#1E293B" gap={28} size={1} />
+              <Controls showInteractive={false} style={{ background: '#1E293B', border: '1px solid #334155', borderRadius: 8 }} />
             </ReactFlow>
-          </div>
+          </motion.div>
 
           {/* Right: Data Inspector */}
-          <div style={S.inspector}>
-            <div style={S.inspHdr}>
-              <Code size={15} color="#60A5FA" />
-              <h3 style={{ color: '#F1F5F9', fontSize: 13, fontWeight: 700, margin: 0 }}>Data Inspector</h3>
+          <motion.div
+            initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15, duration: 0.3 }}
+            style={{
+              background: '#0D1526',
+              border: '1px solid #1E293B',
+              borderRadius: 'var(--radius-lg)',
+              overflow: 'hidden',
+              position: 'sticky', top: 24,
+              boxShadow: 'var(--shadow-md)',
+            }}
+          >
+            {/* Inspector header */}
+            <div style={{
+              background: '#141E33',
+              padding: '13px 18px',
+              borderBottom: '1px solid #1E293B',
+              display: 'flex', alignItems: 'center', gap: 9,
+            }}>
+              <div style={{
+                width: 26, height: 26, borderRadius: 6,
+                background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.2)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Code size={13} color="#60A5FA" />
+              </div>
+              <h3 style={{ color: '#E2E8F0', fontSize: 13, fontWeight: 700, margin: 0, letterSpacing: '-0.01em' }}>Data Inspector</h3>
+              {selectedNode && !selectedNode.notRun && (
+                <span style={{
+                  marginLeft: 'auto', padding: '2px 8px', borderRadius: 'var(--radius-full)',
+                  fontSize: 10, fontWeight: 700,
+                  background: selectedNode.status === 'SUCCESS' ? 'rgba(22,163,74,0.2)' : 'rgba(220,38,38,0.2)',
+                  color: selectedNode.status === 'SUCCESS' ? '#4ADE80' : '#F87171',
+                }}>
+                  {selectedNode.status}
+                </span>
+              )}
             </div>
-            <div style={S.inspBody}>
+
+            {/* Inspector body */}
+            <div style={{ height: 520, overflowY: 'auto', padding: 16 }}>
               {!selectedNode ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', gap: 12, color: '#475569' }}>
-                  <Box size={32} style={{ opacity: 0.25 }} />
-                  <p style={{ fontSize: 13, lineHeight: 1.6, margin: 0 }}>Click any node on the Visual Graph to inspect its raw JSON payload and execution logs.</p>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', gap: 12 }}>
+                  <div style={{ width: 44, height: 44, background: 'rgba(255,255,255,0.04)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #1E293B' }}>
+                    <Box size={20} color="#475569" />
+                  </div>
+                  <p style={{ fontSize: 12, color: '#475569', lineHeight: 1.7, margin: 0, maxWidth: 260 }}>
+                    Click any node in the graph to inspect its output data and execution details.
+                  </p>
                 </div>
               ) : selectedNode.notRun ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', gap: 12, color: '#94A3B8' }}>
-                  <XCircle size={32} style={{ opacity: 0.25 }} />
-                  <p style={{ fontSize: 13, lineHeight: 1.6, margin: 0 }}>This node <strong>({selectedNode.nodeName})</strong> was never executed. The workflow failed or stopped before reaching it.</p>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', gap: 12 }}>
+                  <div style={{ width: 44, height: 44, background: 'rgba(255,255,255,0.04)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #1E293B' }}>
+                    <XCircle size={20} color="#475569" />
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#94A3B8', margin: '0 0 6px' }}>Node not executed</p>
+                    <p style={{ fontSize: 12, color: '#475569', lineHeight: 1.6, margin: 0, maxWidth: 260 }}>
+                      The workflow stopped before reaching this node.
+                    </p>
+                  </div>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* Node info */}
                   <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div>
-                        <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#64748B', marginBottom: 4 }}>Node</p>
-                        <p style={{ fontSize: 14, fontWeight: 700, color: '#F1F5F9', margin: 0 }}>{selectedNode.nodeName}</p>
-                        <p style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'monospace', margin: '4px 0 0' }}>Type: {selectedNode.nodeType}</p>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <span style={{ display: 'inline-flex', padding: '3px 10px', borderRadius: 100, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', background: selectedNode.status === 'SUCCESS' ? 'rgba(22, 163, 74, 0.2)' : 'rgba(220, 38, 38, 0.2)', color: selectedNode.status === 'SUCCESS' ? '#4ADE80' : '#F87171' }}>
-                          {selectedNode.status}
-                        </span>
-                        <p style={{ fontSize: 11, color: '#94A3B8', fontWeight: 600, margin: '6px 0 0' }}>{selectedNode.duration ? `${selectedNode.duration}ms` : '—'}</p>
-                      </div>
-                    </div>
+                    <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#475569', margin: '0 0 6px' }}>Node</p>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: '#E2E8F0', margin: '0 0 3px' }}>{selectedNode.nodeName}</p>
+                    {selectedNode.nodeType && (
+                      <p style={{ fontSize: 11, color: '#64748B', fontFamily: 'monospace', margin: 0 }}>type: {selectedNode.nodeType}</p>
+                    )}
+                    {selectedNode.duration != null && (
+                      <p style={{ fontSize: 11, color: '#64748B', margin: '3px 0 0' }}>{selectedNode.duration}ms</p>
+                    )}
                   </div>
-                  
+
+                  {/* Error */}
                   {selectedNode.status === 'FAILED' && selectedNode.errorMessage && (
                     <div>
-                      <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#FCA5A5', marginBottom: 8 }}>Error Message</p>
-                      <div style={{ background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 10, padding: '12px', color: '#FCA5A5', fontSize: 12, lineHeight: 1.5 }}>
+                      <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#FCA5A5', margin: '0 0 8px' }}>Error</p>
+                      <div style={{
+                        background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.2)',
+                        borderRadius: 8, padding: '10px 12px',
+                        color: '#FCA5A5', fontSize: 12, lineHeight: 1.6,
+                      }}>
                         {selectedNode.errorMessage}
                       </div>
                     </div>
                   )}
 
+                  {/* Output JSON */}
                   <div>
-                    <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#64748B', marginBottom: 8 }}>Output JSON</p>
-                    <pre style={{ background: 'rgba(0,0,0,0.35)', borderRadius: 12, padding: '12px 14px', fontSize: 12, color: '#93C5FD', fontFamily: 'monospace', overflowX: 'auto', border: '1px solid #1E293B', lineHeight: 1.6, margin: 0, maxHeight: 300 }}>
+                    <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#475569', margin: '0 0 8px' }}>Output JSON</p>
+                    <pre style={{
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid #1E293B',
+                      borderRadius: 8, padding: '12px',
+                      fontSize: 11, color: '#93C5FD',
+                      fontFamily: '"Fira Code", "Cascadia Code", monospace',
+                      overflowX: 'auto', overflowY: 'auto',
+                      lineHeight: 1.6, margin: 0,
+                      maxHeight: 320,
+                      whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                    }}>
                       {JSON.stringify(selectedNode.outputData, null, 2)}
                     </pre>
                   </div>
                 </div>
               )}
             </div>
-          </div>
+          </motion.div>
         </div>
+
       </div>
     </div>
   );

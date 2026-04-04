@@ -102,10 +102,13 @@ export default function EditorPage() {
   // Loading state
   if (isLoading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-slate-500">Loading workflow...</p>
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#080F1D', flexDirection: 'column', gap: 14 }}>
+        <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(37,99,235,0.4)' }}>
+          <span style={{ fontSize: 18 }}>⚡</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="ff-spin" style={{ width: 16, height: 16, border: '2px solid rgba(96,165,250,0.2)', borderTop: '2px solid #60A5FA', borderRadius: '50%', display: 'inline-block' }} />
+          <p style={{ fontSize: 13, color: '#4A6080', margin: 0, fontFamily: 'Inter, sans-serif', fontWeight: 500 }}>Loading workflow…</p>
         </div>
       </div>
     );
